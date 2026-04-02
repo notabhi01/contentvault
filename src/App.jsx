@@ -426,7 +426,7 @@ export default function App() {
 
   // grid columns for sources table
   const gridCols = canSeeAll(user.role)
-    ? "2fr 1fr 1.4fr 0.9fr 0.9fr 60px"
+    ? "2fr 1fr 1.4fr 0.9fr 0.9fr 110px"
     : "2fr 1.4fr 0.9fr 0.9fr 60px";
 
   return (
@@ -538,7 +538,7 @@ export default function App() {
                           {userChannels.map(c=><option key={c.name} value={c.name}>{c.name}</option>)}
                         </select>
                         {channelObj && (
-                          <a href={channelObj.url} target="_blank" rel="noreferrer" title="Open channel" style={{ color:"#a1a1aa", fontSize:12, textDecoration:"none", flexShrink:0 }}
+                          <a href={channelObj.url} target="_blank" rel="noreferrer" title="Open channel" style={{ color:"#6366f1", fontSize:12, fontWeight:600, textDecoration:"none", flexShrink:0, background:"#eef2ff", padding:"1px 6px", borderRadius:4 }}
                             onMouseEnter={e=>e.target.style.color="#18181b"}
                             onMouseLeave={e=>e.target.style.color="#a1a1aa"}
                           >↗</a>
@@ -564,13 +564,14 @@ export default function App() {
                   <div style={S.cell}><span style={{ fontSize:12, color:lv?"#71717a":"#d4d4d4" }}>{lv?timeAgo(lv):"Never"}</span></div>
 
                   {/* actions */}
-                  <div style={{...S.cell, gap:4, justifyContent:"flex-end"}}>
+                  <div style={{...S.cell, gap:12, justifyContent:"flex-end"}}>
                     {canEdit(user.role)&&(
                       <button onClick={()=>handleToggleHot(a.id,!isHot)} title={isHot?"Unmark":"Mark hot"} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, padding:"2px 3px", color:isHot?"#f97316":"#d4d4d4", transition:"color .15s" }}>🔥</button>
                     )}
                     {(a.owner===user.displayName||canRemoveAll(user.role))&&(
-                      <button onClick={()=>adminRemove(a.id)} title="Remove" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, padding:"2px 3px", color:"#d4d4d4" }}
-                        onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>✕</button>
+                      <button onClick={()=>{ if(window.confirm("Remove instagram.com/"+a.username+"?")) adminRemove(a.id); }} title="Remove" style={{ background:"none", border:"1px solid #e5e5e5", borderRadius:5, cursor:"pointer", fontSize:11, padding:"3px 8px", color:"#a1a1aa", fontWeight:500, transition:"all .15s" }}
+                        onMouseEnter={e=>{ e.currentTarget.style.background="#fef2f2"; e.currentTarget.style.color="#ef4444"; e.currentTarget.style.borderColor="#fecaca"; }}
+                        onMouseLeave={e=>{ e.currentTarget.style.background="none"; e.currentTarget.style.color="#a1a1aa"; e.currentTarget.style.borderColor="#e5e5e5"; }}>Remove</button>
                     )}
                   </div>
                 </div>
