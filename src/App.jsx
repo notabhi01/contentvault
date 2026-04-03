@@ -88,6 +88,30 @@ function useIsMobile() {
   return mobile;
 }
 
+// ─── Category helpers ────────────────────────────────────────
+const CAT_GRADIENTS = [
+  "linear-gradient(135deg,#667eea,#764ba2)",
+  "linear-gradient(135deg,#f093fb,#f5576c)",
+  "linear-gradient(135deg,#4facfe,#00f2fe)",
+  "linear-gradient(135deg,#43e97b,#38f9d7)",
+  "linear-gradient(135deg,#fa709a,#fee140)",
+  "linear-gradient(135deg,#a18cd1,#fbc2eb)",
+  "linear-gradient(135deg,#fccb90,#d57eeb)",
+  "linear-gradient(135deg,#a1c4fd,#c2e9fb)",
+  "linear-gradient(135deg,#fd7043,#ff8a65)",
+  "linear-gradient(135deg,#26c6da,#00acc1)",
+];
+
+const CAT_EMOJIS = ["🎯","🦋","🌊","🔥","⚡","🎪","🌈","🦄","💎","🎭","🌸","🦊","🐉","🎨","🏆"];
+
+function catStyle(name) {
+  let h = 0;
+  for (let i = 0; i < (name||"").length; i++) h = (h*31 + name.charCodeAt(i));
+  const grad = CAT_GRADIENTS[Math.abs(h) % CAT_GRADIENTS.length];
+  const emoji = CAT_EMOJIS[Math.abs(h*7) % CAT_EMOJIS.length];
+  return { grad, emoji };
+}
+
 // ─── Avatar ───────────────────────────────────────────────────
 function Avatar({ name, size = 44 }) {
   const c = nameColor(name);
@@ -185,6 +209,166 @@ function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, on
   );
 }
 
+// ─── SourceRowWithCat — list row with category assign ────────
+function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource }) {
+  const lv = a[visitKey] || a.lastVisited;
+  const selected = a.postedTo || "";
+  const chObj = (userChannels||[]).find(c => c.name === selected);
+  const assignedCats = a.categories ? a.categories.split(",").filter(Boolean) : [];
+  const menuOpen = catMenuSource === a.id;
+
+  function open(e) {
+    if (e) e.preventDefault();
+    onVisit(a.id);
+    window.open(`https://www.instagram.com/${a.username}`, "_blank", "noreferrer");
+  }
+
+  if (isMobile) {
+    return (
+      <div style={{ position:"relative" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px", borderBottom:"1px solid #f2f2f2", background:"#fff" }}>
+          {/* avatar */}
+          <div onClick={open} style={{ cursor:"pointer" }}>
+            <Avatar name={a.username} size={46} />
+          </div>
+          {/* info */}
+          <div style={{ flex:1, minWidth:0 }} onClick={open}>
+            <div style={{ fontWeight:600, fontSize:14, color:"#18181b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}>{a.username}</div>
+            <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {selected ? selected : "instagram.com/" + a.username}
+            </div>
+            {/* category tags */}
+            {assignedCats.length > 0 && (
+              <div style={{ display:"flex", gap:4, marginTop:4, flexWrap:"wrap" }}>
+                {assignedCats.map(cid => {
+                  const cat = categories.find(c=>c.id===cid);
+                  if (!cat) return null;
+                  const {grad} = catStyle(cat.name);
+                  return <span key={cid} style={{ fontSize:10, fontWeight:600, color:"#fff", background:grad.includes("667eea")?"#667eea":grad.includes("f093fb")?"#f093fb":grad.includes("4facfe")?"#4facfe":grad.includes("43e97b")?"#43e97b":"#fa709a", borderRadius:20, padding:"1px 7px" }}>{cat.name}</span>;
+                })}
+              </div>
+            )}
+          </div>
+          {/* right */}
+          <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+            {lv && <span style={{ fontSize:11, color:"#c7c7c7" }}>{timeAgo(lv)}</span>}
+            <div onClick={open} style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:600, color:"#18181b", cursor:"pointer", whiteSpace:"nowrap" }}>Open</div>
+            {/* ⋯ menu for categories */}
+            {categories.length > 0 && (
+              <div style={{ position:"relative" }}>
+                <button onClick={e=>{ e.stopPropagation(); setCatMenuSource(menuOpen?null:a.id); }}
+                  style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:18, padding:"2px 4px", lineHeight:1 }}>⋯</button>
+                {menuOpen && (
+                  <div style={{ position:"fixed", right:12, background:"#fff", border:"1px solid #e5e5e5", borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", zIndex:100, minWidth:180, padding:"8px 0" }}
+                    onClick={e=>e.stopPropagation()}>
+                    <div style={{ fontSize:11, fontWeight:600, color:"#a1a1aa", padding:"4px 14px 8px", textTransform:"uppercase", letterSpacing:.5 }}>Add to category</div>
+                    {categories.map(cat => {
+                      const assigned = assignedCats.includes(cat.id);
+                      return (
+                        <div key={cat.id} onClick={()=>{ onToggleCat(a.id, cat.id); }}
+                          style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", cursor:"pointer", background:assigned?"#f4f4f5":"#fff" }}
+                          onMouseEnter={e=>e.currentTarget.style.background="#f4f4f5"}
+                          onMouseLeave={e=>e.currentTarget.style.background=assigned?"#f4f4f5":"#fff"}>
+                          <span style={{ fontSize:16 }}>{catStyle(cat.name).emoji}</span>
+                          <span style={{ fontSize:13, fontWeight:500, flex:1 }}>{cat.name}</span>
+                          {assigned && <span style={{ fontSize:14, color:"#18181b" }}>✓</span>}
+                        </div>
+                      );
+                    })}
+                    <div style={{ borderTop:"1px solid #f2f2f2", marginTop:4, paddingTop:4 }}>
+                      {canRemove && <div onClick={()=>{ if(window.confirm(`Remove @${a.username}?`)) { onRemove(a.id); setCatMenuSource(null); } }}
+                        style={{ padding:"8px 14px", cursor:"pointer", color:"#ef4444", fontSize:13 }}>Remove source</div>}
+                      <div onClick={()=>setCatMenuSource(null)} style={{ padding:"8px 14px", cursor:"pointer", color:"#a1a1aa", fontSize:13 }}>Close</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {canRemove && categories.length===0 && (
+              <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username}?`)) onRemove(a.id); }}
+                style={{ background:"none", border:"none", cursor:"pointer", color:"#d4d4d4", fontSize:20, padding:"0 2px" }}>×</button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // desktop
+  return (
+    <div style={{ display:"flex", alignItems:"center", padding:"9px 20px", borderBottom:"1px solid #f2f2f2", background:"#fff", transition:"background .1s", position:"relative" }}
+      onMouseEnter={e=>e.currentTarget.style.background="#fafaf9"}
+      onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+      <div style={{ marginRight:12 }}><Avatar name={a.username} size={36} /></div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <a href={`https://www.instagram.com/${a.username}`} target="_blank" rel="noreferrer" onClick={()=>onVisit(a.id)}
+          style={{ fontWeight:500, fontSize:13, color:"#18181b", textDecoration:"none" }}
+          onMouseEnter={e=>e.target.style.textDecoration="underline"}
+          onMouseLeave={e=>e.target.style.textDecoration="none"}>instagram.com/{a.username}</a>
+        {assignedCats.length > 0 && (
+          <div style={{ display:"flex", gap:4, marginTop:3, flexWrap:"wrap" }}>
+            {assignedCats.map(cid => {
+              const cat = categories.find(c=>c.id===cid);
+              if (!cat) return null;
+              return <span key={cid} style={{ fontSize:10, fontWeight:600, color:"#fff", background:"#18181b", borderRadius:20, padding:"1px 7px" }}>{cat.name}</span>;
+            })}
+          </div>
+        )}
+      </div>
+      <div style={{ width:200, display:"flex", alignItems:"center", gap:6 }}>
+        {userChannels !== null ? (
+          <>
+            <select value={selected} onChange={e=>onPostedTo(a.id, e.target.value)}
+              style={{ background:"transparent", border:"none", fontSize:12, color:selected?"#18181b":"#a1a1aa", outline:"none", cursor:"pointer", fontFamily:"inherit", maxWidth:150 }}>
+              <option value="">— none —</option>
+              {(userChannels||[]).map(c=><option key={c.name} value={c.name}>{c.name}</option>)}
+            </select>
+            {chObj && <a href={chObj.url} target="_blank" rel="noreferrer"
+              style={{ fontSize:11, color:"#6366f1", fontWeight:600, textDecoration:"none", background:"#eef2ff", padding:"2px 6px", borderRadius:4 }}>↗</a>}
+          </>
+        ) : <span style={{ fontSize:12, color:selected?"#71717a":"#d4d4d4" }}>{selected||"—"}</span>}
+      </div>
+      <div style={{ width:100, fontSize:12, color:"#a1a1aa" }}>{a.addedAt||"—"}</div>
+      <div style={{ width:90, fontSize:12, color:lv?"#71717a":"#d4d4d4" }}>{lv?timeAgo(lv):"Never"}</div>
+      {/* category + remove */}
+      <div style={{ width:120, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, position:"relative" }}>
+        {categories.length > 0 && (
+          <div style={{ position:"relative" }}>
+            <button onClick={()=>setCatMenuSource(menuOpen?null:a.id)}
+              style={{ background:"#f4f4f5", border:"none", borderRadius:6, cursor:"pointer", fontSize:11, padding:"4px 8px", color:"#71717a", fontWeight:500 }}>+ Category</button>
+            {menuOpen && (
+              <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)", background:"#fff", border:"1px solid #e5e5e5", borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", zIndex:100, minWidth:180, padding:"8px 0" }}
+                onClick={e=>e.stopPropagation()}>
+                <div style={{ fontSize:11, fontWeight:600, color:"#a1a1aa", padding:"4px 14px 8px", textTransform:"uppercase", letterSpacing:.5 }}>Assign category</div>
+                {categories.map(cat=>{
+                  const assigned = assignedCats.includes(cat.id);
+                  return (
+                    <div key={cat.id} onClick={()=>onToggleCat(a.id, cat.id)}
+                      style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", cursor:"pointer", background:assigned?"#f4f4f5":"#fff" }}
+                      onMouseEnter={e=>e.currentTarget.style.background="#f4f4f5"}
+                      onMouseLeave={e=>e.currentTarget.style.background=assigned?"#f4f4f5":"#fff"}>
+                      <span style={{ fontSize:15 }}>{catStyle(cat.name).emoji}</span>
+                      <span style={{ fontSize:13, fontWeight:500, flex:1 }}>{cat.name}</span>
+                      {assigned && <span style={{ fontSize:13 }}>✓</span>}
+                    </div>
+                  );
+                })}
+                <div onClick={()=>setCatMenuSource(null)} style={{ borderTop:"1px solid #f2f2f2", padding:"8px 14px", cursor:"pointer", color:"#a1a1aa", fontSize:12, marginTop:4 }}>Close</div>
+              </div>
+            )}
+          </div>
+        )}
+        {canRemove && (
+          <button onClick={()=>{ if(window.confirm(`Remove instagram.com/${a.username}?`)) onRemove(a.id); }}
+            style={{ background:"none", border:"1px solid #e5e5e5", borderRadius:5, cursor:"pointer", fontSize:11, padding:"3px 7px", color:"#a1a1aa", fontWeight:500, transition:"all .15s" }}
+            onMouseEnter={e=>{ e.currentTarget.style.background="#fef2f2"; e.currentTarget.style.color="#ef4444"; e.currentTarget.style.borderColor="#fecaca"; }}
+            onMouseLeave={e=>{ e.currentTarget.style.background="none"; e.currentTarget.style.color="#a1a1aa"; e.currentTarget.style.borderColor="#e5e5e5"; }}>Remove</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── local bot ────────────────────────────────────────────────
 function localBot(text, user, accounts) {
   const lower = text.toLowerCase().trim();
@@ -245,6 +429,13 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceView, setSourceView] = useState("list");
+  const [categories, setCategories] = useState([]);
+  const [activeCat, setActiveCat] = useState(null);
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [savingCat, setSavingCat] = useState(false);
+  const [catMenuSource, setCatMenuSource] = useState(null);
   const [adminTab, setAdminTab] = useState("accounts");
   const [browseExpanded, setBrowseExpanded] = useState(null);
   const [products, setProducts] = useState([]);
@@ -281,7 +472,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    refresh(); loadChannels(); loadProducts();
+    refresh(); loadChannels(); loadProducts(); loadCats();
     pollRef.current = setInterval(refresh, 12000);
     return () => clearInterval(pollRef.current);
   }, [user]);
@@ -364,6 +555,46 @@ export default function App() {
   async function removeProduct(id) {
     await fsDelete("products", id);
     await loadProducts();
+  }
+
+  async function loadCats() {
+    try {
+      const docs = await fsGet(`cats_${user.username}`);
+      setCategories(docs.sort((a,b) => (a.name||"").localeCompare(b.name||"")));
+    } catch {}
+  }
+
+  async function createCategory() {
+    if (!newCatName.trim()) return;
+    setSavingCat(true);
+    const id = Date.now().toString();
+    try {
+      await fsSet(`cats_${user.username}`, id, { name: newCatName.trim(), createdAt: new Date().toISOString() });
+      await loadCats();
+      setNewCatName(""); setShowNewCat(false);
+    } catch {}
+    setSavingCat(false);
+  }
+
+  async function deleteCategory(id) {
+    await fsDelete(`cats_${user.username}`, id);
+    // remove this cat from all sources
+    const affected = accounts.filter(a => a.owner===user.displayName && a.categories && a.categories.includes(id));
+    for (const a of affected) {
+      const cats = a.categories.split(",").filter(c=>c!==id).join(",");
+      await fsPatch("sources", a.id, { categories: cats });
+    }
+    await loadCats(); await refresh();
+    if (activeCat===id) setActiveCat(null);
+  }
+
+  async function toggleSourceCategory(sourceId, catId) {
+    const source = accounts.find(a=>a.id===sourceId);
+    if (!source) return;
+    const current = source.categories ? source.categories.split(",").filter(Boolean) : [];
+    const updated = current.includes(catId) ? current.filter(c=>c!==catId) : [...current, catId];
+    await fsPatch("sources", sourceId, { categories: updated.join(",") });
+    setAccounts(prev => prev.map(a => a.id===sourceId ? {...a, categories: updated.join(",")} : a));
   }
 
   async function handleVisit(id) {
@@ -569,46 +800,159 @@ export default function App() {
       {/* ── SOURCES ── */}
       {page==="sources" && (
         <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile ? 70 : 0 }}>
+
           {/* toolbar */}
-          <div style={{ padding:`10px ${isMobile?14:20}px`, display:"flex", alignItems:"center", gap:10, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
+          <div style={{ padding:`10px ${isMobile?12:20}px`, display:"flex", alignItems:"center", gap:8, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
             <div style={{ flex:1, display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:14, fontWeight:600 }}>My Sources</span>
-              <span style={{ fontSize:12, color:"#a1a1aa", background:"#f4f4f5", borderRadius:4, padding:"1px 7px" }}>{sourceList.length}</span>
+              {activeCat ? (
+                <button onClick={()=>setActiveCat(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, color:"#18181b", padding:0, display:"flex", alignItems:"center", gap:6 }}>
+                  ← {categories.find(c=>c.id===activeCat)?.name||"Category"}
+                </button>
+              ) : (
+                <>
+                  <span style={{ fontSize:14, fontWeight:600 }}>My Sources</span>
+                  <span style={{ fontSize:12, color:"#a1a1aa", background:"#f4f4f5", borderRadius:4, padding:"1px 7px" }}>{sourceList.length}</span>
+                </>
+              )}
             </div>
-            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search…"
-              style={{ width: isMobile?120:180, background:"#f4f4f5", border:"none", borderRadius:8, padding:"7px 10px", color:"#18181b", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+            {/* view toggle */}
+            {!activeCat && (
+              <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
+                <button onClick={()=>setSourceView("list")} style={{ background:sourceView==="list"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="list"?600:400, color:sourceView==="list"?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:sourceView==="list"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>List</button>
+                <button onClick={()=>setSourceView("categories")} style={{ background:sourceView==="categories"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="categories"?600:400, color:sourceView==="categories"?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:sourceView==="categories"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>Categories</button>
+              </div>
+            )}
+            {/* search — list view only */}
+            {sourceView==="list" && !activeCat && (
+              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search…"
+                style={{ width: isMobile?100:160, background:"#f4f4f5", border:"none", borderRadius:8, padding:"6px 10px", color:"#18181b", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+            )}
+            {/* + category button */}
+            {sourceView==="categories" && !activeCat && (
+              <button onClick={()=>setShowNewCat(!showNewCat)} style={{ background:showNewCat?"#f4f4f5":"#18181b", color:showNewCat?"#71717a":"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                {showNewCat?"Cancel":"+ New"}
+              </button>
+            )}
           </div>
 
-          {/* desktop header */}
-          {!isMobile && (
-            <div style={{ display:"flex", alignItems:"center", padding:"7px 20px", borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
-              <div style={{ width:36+12, flexShrink:0 }} />
-              <div style={{ flex:1, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Account</div>
-              <div style={{ width:200, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Posted to</div>
-              <div style={{ width:100, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Added</div>
-              <div style={{ width:90, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Last visited</div>
-              <div style={{ width:80 }} />
+          {/* new category input */}
+          {showNewCat && sourceView==="categories" && (
+            <div style={{ padding:`10px ${isMobile?12:20}px`, borderBottom:"1px solid #ebebeb", background:"#fafaf9", display:"flex", gap:8 }}>
+              <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="Category name (e.g. Frog Costume)"
+                onKeyDown={e=>{ if(e.key==="Enter") createCategory(); }}
+                autoFocus
+                style={{ flex:1, background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+              <button onClick={createCategory} disabled={savingCat||!newCatName.trim()}
+                style={{ background:savingCat||!newCatName.trim()?"#e5e5e5":"#18181b", color:savingCat||!newCatName.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                {savingCat?"…":"Create"}
+              </button>
             </div>
           )}
 
-          {/* list */}
-          <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
-            {sourceList.length===0 ? (
-              <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
-                <div style={{ fontSize:32, marginBottom:10 }}>—</div>
-                <div style={{ fontSize:14 }}>{searchQuery?"No results.":"No sources yet."}</div>
-                {canEdit(user.role)&&!searchQuery&&<button onClick={()=>setPage("chat")} style={{ marginTop:14, background:"#18181b", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>Add via chat</button>}
+          {/* ── CATEGORY CARDS VIEW ── */}
+          {sourceView==="categories" && !activeCat && (
+            <div style={{ flex:1, overflow:"auto", padding:`20px ${isMobile?12:20}px` }}>
+              {categories.length===0 ? (
+                <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                  <div style={{ fontSize:32, marginBottom:10 }}>📂</div>
+                  <div style={{ fontSize:14, marginBottom:6 }}>No categories yet.</div>
+                  <div style={{ fontSize:13, color:"#c7c7c7" }}>Tap "+ New" to create your first one.</div>
+                </div>
+              ) : (
+                <div style={{ columns: isMobile?2:3, columnGap: isMobile?10:14 }}>
+                  {categories.map(cat => {
+                    const { grad, emoji } = catStyle(cat.name);
+                    const count = myAccounts.filter(a => a.categories && a.categories.split(",").includes(cat.id)).length;
+                    return (
+                      <div key={cat.id} style={{ breakInside:"avoid", marginBottom: isMobile?10:14, display:"inline-block", width:"100%" }}>
+                        <div onClick={()=>setActiveCat(cat.id)}
+                          style={{ borderRadius:16, overflow:"hidden", cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,0.08)", transition:"transform .15s, box-shadow .15s" }}
+                          onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-3px)"; e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,0.13)"; }}
+                          onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)"; }}
+                        >
+                          {/* gradient area */}
+                          <div style={{ background:grad, height: isMobile?100:120, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <span style={{ fontSize: isMobile?40:48 }}>{emoji}</span>
+                          </div>
+                          {/* info */}
+                          <div style={{ background:"#fff", padding:"10px 12px 12px" }}>
+                            <div style={{ fontWeight:700, fontSize: isMobile?13:14, color:"#18181b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{cat.name}</div>
+                            <div style={{ fontSize:12, color:"#a1a1aa", marginTop:3 }}>{count} source{count!==1?"s":""}</div>
+                          </div>
+                        </div>
+                        {/* delete */}
+                        <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Delete "${cat.name}"?`)) deleteCategory(cat.id); }}
+                          style={{ width:"100%", background:"none", border:"none", cursor:"pointer", fontSize:11, color:"#d4d4d4", padding:"4px 0", marginTop:2 }}
+                          onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>Delete</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── CATEGORY DETAIL (sources in this category) ── */}
+          {sourceView==="categories" && activeCat && (
+            <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
+              {(() => {
+                const catSources = myAccounts.filter(a => a.categories && a.categories.split(",").includes(activeCat));
+                return catSources.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                    <div style={{ fontSize:32, marginBottom:10 }}>—</div>
+                    <div style={{ fontSize:14 }}>No sources in this category yet.</div>
+                    <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>Switch to List view and tap ⋯ on a source to assign it.</div>
+                  </div>
+                ) : catSources.map(a=>(
+                  <SourceRow key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
+                    onRemove={removeAccount}
+                    canRemove={a.owner===user.displayName||canRemoveAll(user.role)}
+                    userChannels={a.owner===user.displayName ? userChannels : null}
+                    onPostedTo={updatePostedTo}
+                    isMobile={isMobile}
+                  />
+                ));
+              })()}
+            </div>
+          )}
+
+          {/* ── LIST VIEW ── */}
+          {sourceView==="list" && (
+            <>
+              {/* desktop header */}
+              {!isMobile && (
+                <div style={{ display:"flex", alignItems:"center", padding:"7px 20px", borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
+                  <div style={{ width:48, flexShrink:0 }} />
+                  <div style={{ flex:1, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Account</div>
+                  <div style={{ width:200, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Posted to</div>
+                  <div style={{ width:100, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Added</div>
+                  <div style={{ width:90, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Last visited</div>
+                  <div style={{ width:120 }} />
+                </div>
+              )}
+              <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
+                {sourceList.length===0 ? (
+                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                    <div style={{ fontSize:32, marginBottom:10 }}>—</div>
+                    <div style={{ fontSize:14 }}>{searchQuery?"No results.":"No sources yet."}</div>
+                    {canEdit(user.role)&&!searchQuery&&<button onClick={()=>setPage("chat")} style={{ marginTop:14, background:"#18181b", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>Add via chat</button>}
+                  </div>
+                ) : sourceList.map(a=>(
+                  <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
+                    onRemove={removeAccount}
+                    canRemove={a.owner===user.displayName||canRemoveAll(user.role)}
+                    userChannels={a.owner===user.displayName ? userChannels : null}
+                    onPostedTo={updatePostedTo}
+                    isMobile={isMobile}
+                    categories={categories}
+                    onToggleCat={toggleSourceCategory}
+                    catMenuSource={catMenuSource}
+                    setCatMenuSource={setCatMenuSource}
+                  />
+                ))}
               </div>
-            ) : sourceList.map(a=>(
-              <SourceRow key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
-                onRemove={removeAccount}
-                canRemove={a.owner===user.displayName||canRemoveAll(user.role)}
-                userChannels={a.owner===user.displayName ? userChannels : null}
-                onPostedTo={updatePostedTo}
-                isMobile={isMobile}
-              />
-            ))}
-          </div>
+            </>
+          )}
         </div>
       )}
 
