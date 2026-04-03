@@ -247,6 +247,13 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [adminTab, setAdminTab] = useState("accounts");
   const [browseExpanded, setBrowseExpanded] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [newProdName, setNewProdName] = useState("");
+  const [newProdImg, setNewProdImg] = useState("");
+  const [newProdLink, setNewProdLink] = useState("");
+  const [addingProd, setAddingProd] = useState(false);
+  const [showAddProd, setShowAddProd] = useState(false);
   const [userChannels, setUserChannels] = useState([]);
   const [newChName, setNewChName] = useState("");
   const [newChUrl, setNewChUrl] = useState("");
@@ -274,7 +281,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    refresh(); loadChannels();
+    refresh(); loadChannels(); loadProducts();
     pollRef.current = setInterval(refresh, 12000);
     return () => clearInterval(pollRef.current);
   }, [user]);
@@ -323,6 +330,40 @@ export default function App() {
     await fsSet("channels", user.username, { data: JSON.stringify(updated) });
     setUserChannels(updated);
     localStorage.setItem(`cv_ch_${user.username}`, JSON.stringify(updated));
+  }
+
+  async function loadProducts() {
+    setLoadingProducts(true);
+    try {
+      const docs = await fsGet("products");
+      setProducts(docs.sort((a,b) => (b.addedAt||"").localeCompare(a.addedAt||"")));
+    } catch {}
+    setLoadingProducts(false);
+  }
+
+  async function addProduct() {
+    if (!newProdName.trim() || !newProdLink.trim()) return;
+    setAddingProd(true);
+    const id = Date.now().toString();
+    const entry = {
+      name: newProdName.trim(),
+      imgUrl: newProdImg.trim(),
+      link: newProdLink.trim(),
+      addedBy: user.displayName,
+      addedAt: new Date().toISOString(),
+    };
+    try {
+      await fsSet("products", id, entry);
+      await loadProducts();
+      setNewProdName(""); setNewProdImg(""); setNewProdLink("");
+      setShowAddProd(false);
+    } catch {}
+    setAddingProd(false);
+  }
+
+  async function removeProduct(id) {
+    await fsDelete("products", id);
+    await loadProducts();
   }
 
   async function handleVisit(id) {
@@ -480,11 +521,12 @@ export default function App() {
   );
 
   const navItems = [
-    {id:"sources", label:"Sources", show:true},
-    {id:"browse",  label:"Browse",  show:canBrowse(user.role)},
-    {id:"chat",    label:"Chat",    show:canEdit(user.role)},
-    {id:"admin",   label:"Admin",   show:canSeeAll(user.role)},
-    {id:"profile", label:"Profile", show:true},
+    {id:"sources",  label:"Sources",  show:true},
+    {id:"browse",   label:"Browse",   show:canBrowse(user.role)},
+    {id:"winning",  label:"Winning",  show:true},
+    {id:"chat",     label:"Chat",     show:canEdit(user.role)},
+    {id:"admin",    label:"Admin",    show:canSeeAll(user.role)},
+    {id:"profile",  label:"Profile",  show:true},
   ].filter(n=>n.show);
 
   return (
@@ -516,7 +558,7 @@ export default function App() {
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{ flex:1, background:"none", border:"none", padding:"10px 0 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
               <span style={{ fontSize:18 }}>
-                {n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="chat"?"💬":n.id==="admin"?"🛡️":"👤"}
+                {n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":"👤"}
               </span>
               <span style={{ fontSize:10, color:page===n.id?"#18181b":"#a1a1aa", fontWeight:page===n.id?600:400 }}>{n.label}</span>
             </button>
@@ -648,6 +690,113 @@ export default function App() {
             <textarea ref={inputRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={handleChatKey} placeholder="Paste a link or @username…" rows={1}
               style={{ flex:1, background:"#f4f4f5", border:"none", borderRadius:10, padding:"10px 12px", color:"#18181b", fontSize:14, resize:"none", fontFamily:"inherit", outline:"none", lineHeight:1.5 }} />
             <button onClick={send} disabled={loading||!input.trim()} style={{ background:loading||!input.trim()?"#f4f4f5":"#18181b", color:loading||!input.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:10, width:42, height:42, cursor:loading||!input.trim()?"not-allowed":"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, alignSelf:"flex-end", transition:"all .15s" }}>↑</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── WINNING PRODUCTS ── */}
+      {page==="winning" && (
+        <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
+          {/* header */}
+          <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div>
+              <div style={{ fontSize:14, fontWeight:600 }}>Winning Products</div>
+              <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2 }}>Products doing well — source videos featuring these</div>
+            </div>
+            {canSeeAll(user.role) && (
+              <button onClick={()=>setShowAddProd(!showAddProd)}
+                style={{ background: showAddProd?"#f4f4f5":"#18181b", color: showAddProd?"#71717a":"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .15s" }}>
+                {showAddProd ? "Cancel" : "+ Add"}
+              </button>
+            )}
+          </div>
+
+          {/* add product form */}
+          {showAddProd && canSeeAll(user.role) && (
+            <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
+              <div style={{ display:"flex", flexDirection:"column", gap:10, maxWidth:480 }}>
+                <input value={newProdName} onChange={e=>setNewProdName(e.target.value)} placeholder="Product name"
+                  style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                <input value={newProdImg} onChange={e=>setNewProdImg(e.target.value)} placeholder="Image URL (paste a direct image link)"
+                  style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                <input value={newProdLink} onChange={e=>setNewProdLink(e.target.value)} placeholder="Video link (YouTube, TikTok, etc.)"
+                  style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                {newProdImg && (
+                  <img src={newProdImg} alt="preview" style={{ width:"100%", maxWidth:200, height:140, objectFit:"cover", borderRadius:10, border:"1px solid #e5e5e5" }} onError={e=>e.target.style.display="none"} />
+                )}
+                <button onClick={addProduct} disabled={addingProd||!newProdName.trim()||!newProdLink.trim()}
+                  style={{ background:addingProd||!newProdName.trim()||!newProdLink.trim()?"#e5e5e5":"#18181b", color:addingProd||!newProdName.trim()||!newProdLink.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:8, padding:"10px", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                  {addingProd?"Adding…":"Add Product"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* pinterest grid */}
+          <div style={{ padding:`16px ${isMobile?12:20}px` }}>
+            {loadingProducts ? (
+              <div style={{ textAlign:"center", padding:"60px 20px", color:"#a1a1aa", fontSize:13 }}>Loading…</div>
+            ) : products.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                <div style={{ fontSize:32, marginBottom:10 }}>—</div>
+                <div style={{ fontSize:14 }}>No winning products yet.</div>
+                {canSeeAll(user.role) && <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>Tap "+ Add" to add the first one.</div>}
+              </div>
+            ) : (
+              <div style={{
+                columns: isMobile ? 2 : 3,
+                columnGap: isMobile ? 10 : 14,
+              }}>
+                {products.map(p => {
+                  const daysAgo = Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000);
+                  const timeLabel = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
+                  return (
+                    <div key={p.id} style={{
+                      breakInside: "avoid",
+                      marginBottom: isMobile ? 10 : 14,
+                      borderRadius: 14,
+                      overflow: "hidden",
+                      background: "#fff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)",
+                      cursor: "pointer",
+                      transition: "transform .15s, box-shadow .15s",
+                      display: "inline-block",
+                      width: "100%",
+                    }}
+                      onClick={() => window.open(p.link, "_blank", "noreferrer")}
+                      onMouseEnter={e => { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.1), 0 8px 24px rgba(0,0,0,0.06)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)"; }}
+                    >
+                      {/* image */}
+                      {p.imgUrl ? (
+                        <div style={{ width:"100%", background:"#f4f4f5", position:"relative" }}>
+                          <img src={p.imgUrl} alt={p.name}
+                            style={{ width:"100%", display:"block", borderRadius:"14px 14px 0 0" }}
+                            onError={e => { e.target.parentElement.style.display="none"; }}
+                          />
+                        </div>
+                      ) : (
+                        <div style={{ width:"100%", height:120, background:"linear-gradient(135deg,#f4f4f5,#e5e5e5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32 }}>🎬</div>
+                      )}
+                      {/* info */}
+                      <div style={{ padding:"10px 12px 12px" }}>
+                        <div style={{ fontWeight:600, fontSize: isMobile?13:14, color:"#18181b", lineHeight:1.3, marginBottom:6 }}>{p.name}</div>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 }}>
+                          <span style={{ fontSize:11, color:"#a1a1aa" }}>{timeLabel}</span>
+                          <span style={{ fontSize:11, color:"#a1a1aa" }}>by {p.addedBy}</span>
+                        </div>
+                        <div style={{ marginTop:8, background:"#18181b", color:"#fff", borderRadius:6, padding:"5px 10px", fontSize:11, fontWeight:600, textAlign:"center" }}>Watch video ↗</div>
+                        {canSeeAll(user.role) && (
+                          <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove "${p.name}"?`)) removeProduct(p.id); }}
+                            style={{ width:"100%", marginTop:6, background:"none", border:"none", cursor:"pointer", fontSize:11, color:"#d4d4d4", padding:"2px 0" }}
+                            onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>Remove</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
