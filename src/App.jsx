@@ -530,8 +530,20 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     refresh(); loadChannels(); loadProducts(); loadCats();
-    pollRef.current = setInterval(refresh, 12000);
-    return () => clearInterval(pollRef.current);
+
+    // Only poll every 5 minutes max instead of every 10s
+    pollRef.current = setInterval(refresh, 5 * 60 * 1000);
+
+    // Also refresh when user comes back to the tab
+    function onVisible() {
+      if (document.visibilityState === "visible") refresh();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(pollRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [user]);
 
   async function refresh() {
@@ -635,13 +647,17 @@ export default function App() {
 
   async function deleteCategory(id) {
     await fsDelete(`cats_${user.username}`, id);
-    // remove this cat from all sources
-    const affected = accounts.filter(a => a.owner===user.displayName && a.categories && a.categories.includes(id));
+    setCategories(prev => prev.filter(c => c.id !== id));
+    // remove this cat from all sources locally
+    const affected = accounts.filter(a => a.owner===user.displayName && a.categories && a.categories.split(",").includes(id));
     for (const a of affected) {
       const cats = a.categories.split(",").filter(c=>c!==id).join(",");
       await fsPatch("sources", a.id, { categories: cats });
     }
-    await loadCats(); await refresh();
+    setAccounts(prev => prev.map(a => {
+      if (!a.categories) return a;
+      return {...a, categories: a.categories.split(",").filter(c=>c!==id).join(",")};
+    }));
     if (activeCat===id) setActiveCat(null);
   }
 
@@ -667,7 +683,8 @@ export default function App() {
   }
 
   async function removeAccount(id) {
-    await fsDelete("sources", id); await refresh();
+    await fsDelete("sources", id);
+    setAccounts(prev => prev.filter(a => a.id !== id));
   }
 
   function detectRole(p) {
@@ -732,30 +749,35 @@ export default function App() {
     setInput("");
     const hist = [...messages, {role:"user",text}];
     setMessages(hist); setLoading(true);
-    const fresh = await fsGet("sources"); setAccounts(fresh);
+    // use local state — no extra Firebase read
+    const fresh = accounts;
     const result = localBot(text, user, fresh, categories);
     const {action, username, usernames, catName, catId, reply} = result;
 
     if (!canEdit(user.role)) {
       // linktree read only
     } else if (action==="add" && username) {
-      await fsSet("sources", username, {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:"", categories:""});
-      setAccounts(await fsGet("sources"));
+      const entry = {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:"", categories:""};
+      await fsSet("sources", username, entry);
+      // update local state directly — no re-fetch
+      setAccounts(prev => [...prev.filter(a=>a.id!==username), {id:username, ...entry}]);
 
     } else if (action==="bulk_add" && usernames && usernames.length > 0) {
-      await Promise.all(usernames.map(u =>
-        fsSet("sources", u, {username:u, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${u}`, postedTo:"", categories:""})
-      ));
-      setAccounts(await fsGet("sources"));
+      const entries = usernames.map(u => ({username:u, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${u}`, postedTo:"", categories:""}));
+      await Promise.all(entries.map(e => fsSet("sources", e.username, e)));
+      setAccounts(prev => {
+        const filtered = prev.filter(a => !usernames.includes(a.id));
+        return [...filtered, ...entries.map(e => ({id:e.username, ...e}))];
+      });
 
     } else if (action==="remove" && username) {
       await fsDelete("sources", username);
-      setAccounts(await fsGet("sources"));
+      setAccounts(prev => prev.filter(a => a.id!==username));
 
     } else if (action==="create_cat" && catName) {
       const id = Date.now().toString();
       await fsSet(`cats_${user.username}`, id, { name: catName, createdAt: new Date().toISOString() });
-      await loadCats();
+      setCategories(prev => [...prev, {id, name:catName, createdAt:new Date().toISOString()}].sort((a,b)=>a.name.localeCompare(b.name)));
 
     } else if (action==="add_to_cat" && username && catId) {
       const source = fresh.find(a => a.username===username && a.owner===user.displayName);
@@ -764,21 +786,20 @@ export default function App() {
         if (!current.includes(catId)) {
           const updated = [...current, catId].join(",");
           await fsPatch("sources", source.id, { categories: updated });
-          setAccounts(await fsGet("sources"));
+          setAccounts(prev => prev.map(a => a.id===source.id ? {...a, categories:updated} : a));
         }
       }
 
     } else if (action==="create_cat_and_add" && catName && username) {
       const id = Date.now().toString();
       await fsSet(`cats_${user.username}`, id, { name: catName, createdAt: new Date().toISOString() });
-      await loadCats();
-      // also add source to this new category if it exists
+      setCategories(prev => [...prev, {id, name:catName, createdAt:new Date().toISOString()}].sort((a,b)=>a.name.localeCompare(b.name)));
       const source = fresh.find(a => a.username===username && a.owner===user.displayName);
       if (source) {
         const current = source.categories ? source.categories.split(",").filter(Boolean) : [];
         const updated = [...current, id].join(",");
         await fsPatch("sources", source.id, { categories: updated });
-        setAccounts(await fsGet("sources"));
+        setAccounts(prev => prev.map(a => a.id===source.id ? {...a, categories:updated} : a));
       }
     }
 
