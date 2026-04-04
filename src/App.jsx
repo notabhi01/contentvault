@@ -60,6 +60,25 @@ function extractUsername(raw) {
   if (at) return at[1].toLowerCase();
   return null;
 }
+
+// extract ALL usernames/links from a message
+function extractAllUsernames(text) {
+  const found = [];
+  // all instagram.com/... URLs
+  const urlRegex = /instagram\.com\/(?:_u\/)?([a-zA-Z0-9._]+)/gi;
+  let m;
+  while ((m = urlRegex.exec(text)) !== null) {
+    const u = m[1].toLowerCase().replace(/\/$/, "");
+    if (u && !found.includes(u)) found.push(u);
+  }
+  // all @handles not already found
+  const atRegex = /@([a-zA-Z0-9._]+)/g;
+  while ((m = atRegex.exec(text)) !== null) {
+    const u = m[1].toLowerCase();
+    if (u && !found.includes(u)) found.push(u);
+  }
+  return found;
+}
 function timeAgo(iso) {
   if (!iso) return null;
   const diff = Date.now() - new Date(iso).getTime();
@@ -225,72 +244,110 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
 
   if (isMobile) {
     return (
-      <div style={{ position:"relative" }}>
+      <>
+        {/* row */}
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px", borderBottom:"1px solid #f2f2f2", background:"#fff" }}>
-          {/* avatar */}
-          <div onClick={open} style={{ cursor:"pointer" }}>
+          <div onClick={open} style={{ cursor:"pointer", flexShrink:0 }}>
             <Avatar name={a.username} size={46} />
           </div>
-          {/* info */}
           <div style={{ flex:1, minWidth:0 }} onClick={open}>
-            <div style={{ fontWeight:600, fontSize:14, color:"#18181b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}>{a.username}</div>
+            <div style={{ fontWeight:600, fontSize:14, color:"#18181b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
             <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {selected ? selected : "instagram.com/" + a.username}
             </div>
-            {/* category tags */}
             {assignedCats.length > 0 && (
               <div style={{ display:"flex", gap:4, marginTop:4, flexWrap:"wrap" }}>
                 {assignedCats.map(cid => {
                   const cat = categories.find(c=>c.id===cid);
                   if (!cat) return null;
                   const {grad} = catStyle(cat.name);
-                  return <span key={cid} style={{ fontSize:10, fontWeight:600, color:"#fff", background:grad.includes("667eea")?"#667eea":grad.includes("f093fb")?"#f093fb":grad.includes("4facfe")?"#4facfe":grad.includes("43e97b")?"#43e97b":"#fa709a", borderRadius:20, padding:"1px 7px" }}>{cat.name}</span>;
+                  const bgColor = grad.includes("667eea")?"#667eea":grad.includes("f093fb")?"#f093fb":grad.includes("4facfe")?"#4facfe":grad.includes("43e97b")?"#43e97b":"#fa709a";
+                  return <span key={cid} style={{ fontSize:10, fontWeight:600, color:"#fff", background:bgColor, borderRadius:20, padding:"1px 7px" }}>{cat.name}</span>;
                 })}
               </div>
             )}
           </div>
-          {/* right */}
           <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
             {lv && <span style={{ fontSize:11, color:"#c7c7c7" }}>{timeAgo(lv)}</span>}
             <div onClick={open} style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:600, color:"#18181b", cursor:"pointer", whiteSpace:"nowrap" }}>Open</div>
-            {/* ⋯ menu for categories */}
-            {categories.length > 0 && (
-              <div style={{ position:"relative" }}>
-                <button onClick={e=>{ e.stopPropagation(); setCatMenuSource(menuOpen?null:a.id); }}
-                  style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:18, padding:"2px 4px", lineHeight:1 }}>⋯</button>
-                {menuOpen && (
-                  <div style={{ position:"fixed", right:12, background:"#fff", border:"1px solid #e5e5e5", borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", zIndex:100, minWidth:180, padding:"8px 0" }}
-                    onClick={e=>e.stopPropagation()}>
-                    <div style={{ fontSize:11, fontWeight:600, color:"#a1a1aa", padding:"4px 14px 8px", textTransform:"uppercase", letterSpacing:.5 }}>Add to category</div>
-                    {categories.map(cat => {
-                      const assigned = assignedCats.includes(cat.id);
-                      return (
-                        <div key={cat.id} onClick={()=>{ onToggleCat(a.id, cat.id); }}
-                          style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px", cursor:"pointer", background:assigned?"#f4f4f5":"#fff" }}
-                          onMouseEnter={e=>e.currentTarget.style.background="#f4f4f5"}
-                          onMouseLeave={e=>e.currentTarget.style.background=assigned?"#f4f4f5":"#fff"}>
-                          <span style={{ fontSize:16 }}>{catStyle(cat.name).emoji}</span>
-                          <span style={{ fontSize:13, fontWeight:500, flex:1 }}>{cat.name}</span>
-                          {assigned && <span style={{ fontSize:14, color:"#18181b" }}>✓</span>}
-                        </div>
-                      );
-                    })}
-                    <div style={{ borderTop:"1px solid #f2f2f2", marginTop:4, paddingTop:4 }}>
-                      {canRemove && <div onClick={()=>{ if(window.confirm(`Remove @${a.username}?`)) { onRemove(a.id); setCatMenuSource(null); } }}
-                        style={{ padding:"8px 14px", cursor:"pointer", color:"#ef4444", fontSize:13 }}>Remove source</div>}
-                      <div onClick={()=>setCatMenuSource(null)} style={{ padding:"8px 14px", cursor:"pointer", color:"#a1a1aa", fontSize:13 }}>Close</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {canRemove && categories.length===0 && (
-              <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username}?`)) onRemove(a.id); }}
-                style={{ background:"none", border:"none", cursor:"pointer", color:"#d4d4d4", fontSize:20, padding:"0 2px" }}>×</button>
-            )}
+            <button
+              onClick={e=>{ e.stopPropagation(); setCatMenuSource(menuOpen ? null : a.id); }}
+              style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:20, padding:"4px 6px", lineHeight:1, borderRadius:6 }}
+            >⋯</button>
           </div>
         </div>
-      </div>
+
+        {/* bottom sheet overlay */}
+        {menuOpen && (
+          <>
+            {/* backdrop */}
+            <div
+              onClick={()=>setCatMenuSource(null)}
+              style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200 }}
+            />
+            {/* sheet */}
+            <div style={{
+              position:"fixed", bottom:0, left:0, right:0,
+              background:"#fff", borderRadius:"20px 20px 0 0",
+              zIndex:201, paddingBottom:"env(safe-area-inset-bottom)",
+              boxShadow:"0 -4px 30px rgba(0,0,0,0.15)",
+              animation:"slideUp .22s ease-out",
+            }}>
+              {/* handle */}
+              <div style={{ width:40, height:4, background:"#e5e5e5", borderRadius:99, margin:"12px auto 4px" }} />
+              {/* source name */}
+              <div style={{ padding:"8px 20px 14px", borderBottom:"1px solid #f2f2f2", display:"flex", alignItems:"center", gap:10 }}>
+                <Avatar name={a.username} size={36} />
+                <div>
+                  <div style={{ fontWeight:700, fontSize:14 }}>@{a.username}</div>
+                  <div style={{ fontSize:12, color:"#a1a1aa" }}>Assign to categories</div>
+                </div>
+              </div>
+
+              {/* category list */}
+              <div style={{ maxHeight:300, overflowY:"auto" }}>
+                {categories.length === 0 ? (
+                  <div style={{ padding:"24px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
+                    No categories yet.<br/>Create one in the Categories view.
+                  </div>
+                ) : categories.map(cat => {
+                  const assigned = assignedCats.includes(cat.id);
+                  const { emoji, grad } = catStyle(cat.name);
+                  return (
+                    <div key={cat.id}
+                      onClick={()=>{ onToggleCat(a.id, cat.id); }}
+                      style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 20px", borderBottom:"1px solid #f8f8f8", background: assigned?"#fafaf9":"#fff", cursor:"pointer" }}
+                    >
+                      <div style={{ width:40, height:40, borderRadius:12, background:grad, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{emoji}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:600, fontSize:14 }}>{cat.name}</div>
+                        <div style={{ fontSize:12, color:"#a1a1aa", marginTop:1 }}>{assigned ? "In this category" : "Tap to add"}</div>
+                      </div>
+                      <div style={{ width:26, height:26, borderRadius:"50%", background: assigned?"#18181b":"#f4f4f5", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {assigned && <span style={{ color:"#fff", fontSize:14 }}>✓</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* actions */}
+              <div style={{ padding:"12px 20px 8px", borderTop:"1px solid #f2f2f2" }}>
+                {canRemove && (
+                  <button onClick={()=>{ if(window.confirm(`Remove @${a.username}?`)) { onRemove(a.id); setCatMenuSource(null); } }}
+                    style={{ width:"100%", background:"#fef2f2", border:"none", borderRadius:10, padding:"12px", color:"#ef4444", fontWeight:600, fontSize:14, cursor:"pointer", marginBottom:8 }}>
+                    Remove source
+                  </button>
+                )}
+                <button onClick={()=>setCatMenuSource(null)}
+                  style={{ width:"100%", background:"#f4f4f5", border:"none", borderRadius:10, padding:"12px", color:"#71717a", fontWeight:600, fontSize:14, cursor:"pointer" }}>
+                  Done
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </>
     );
   }
 
@@ -676,15 +733,56 @@ export default function App() {
     const hist = [...messages, {role:"user",text}];
     setMessages(hist); setLoading(true);
     const fresh = await fsGet("sources"); setAccounts(fresh);
-    const {action,username,reply} = localBot(text,user,fresh);
-    if (action==="add" && username && canEdit(user.role)) {
-      await fsSet("sources", username, {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:""});
+    const result = localBot(text, user, fresh, categories);
+    const {action, username, usernames, catName, catId, reply} = result;
+
+    if (!canEdit(user.role)) {
+      // linktree read only
+    } else if (action==="add" && username) {
+      await fsSet("sources", username, {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:"", categories:""});
       setAccounts(await fsGet("sources"));
-    } else if (action==="remove" && username && canEdit(user.role)) {
+
+    } else if (action==="bulk_add" && usernames && usernames.length > 0) {
+      await Promise.all(usernames.map(u =>
+        fsSet("sources", u, {username:u, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${u}`, postedTo:"", categories:""})
+      ));
+      setAccounts(await fsGet("sources"));
+
+    } else if (action==="remove" && username) {
       await fsDelete("sources", username);
       setAccounts(await fsGet("sources"));
+
+    } else if (action==="create_cat" && catName) {
+      const id = Date.now().toString();
+      await fsSet(`cats_${user.username}`, id, { name: catName, createdAt: new Date().toISOString() });
+      await loadCats();
+
+    } else if (action==="add_to_cat" && username && catId) {
+      const source = fresh.find(a => a.username===username && a.owner===user.displayName);
+      if (source) {
+        const current = source.categories ? source.categories.split(",").filter(Boolean) : [];
+        if (!current.includes(catId)) {
+          const updated = [...current, catId].join(",");
+          await fsPatch("sources", source.id, { categories: updated });
+          setAccounts(await fsGet("sources"));
+        }
+      }
+
+    } else if (action==="create_cat_and_add" && catName && username) {
+      const id = Date.now().toString();
+      await fsSet(`cats_${user.username}`, id, { name: catName, createdAt: new Date().toISOString() });
+      await loadCats();
+      // also add source to this new category if it exists
+      const source = fresh.find(a => a.username===username && a.owner===user.displayName);
+      if (source) {
+        const current = source.categories ? source.categories.split(",").filter(Boolean) : [];
+        const updated = [...current, id].join(",");
+        await fsPatch("sources", source.id, { categories: updated });
+        setAccounts(await fsGet("sources"));
+      }
     }
-    await new Promise(r=>setTimeout(r,280));
+
+    await new Promise(r=>setTimeout(r,250));
     setMessages([...hist,{role:"assistant",text:reply}]);
     setLoading(false);
     setTimeout(()=>inputRef.current?.focus(),50);
@@ -1257,7 +1355,7 @@ export default function App() {
         </div>
       )}
 
-      <style>{`@keyframes bounce{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(-4px);opacity:1}} * { box-sizing: border-box; }`}</style>
+      <style>{`@keyframes bounce{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(-4px);opacity:1}} @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}} * { box-sizing: border-box; }`}</style>
     </div>
   );
 }
