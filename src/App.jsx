@@ -229,12 +229,16 @@ function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, on
 }
 
 // ─── SourceRowWithCat — list row with category assign ────────
-function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource }) {
+function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource, onFlag, canFlag }) {
   const lv = a[visitKey] || a.lastVisited;
   const selected = a.postedTo || "";
   const chObj = (userChannels||[]).find(c => c.name === selected);
   const assignedCats = a.categories ? a.categories.split(",").filter(Boolean) : [];
   const menuOpen = catMenuSource === a.id;
+  const flag = a.flag || ""; // "low_quality" | "not_using" | ""
+  const lv2 = a[visitKey] || a.lastVisited;
+  const daysSinceVisit = lv2 ? Math.floor((Date.now() - new Date(lv2).getTime()) / 86400000) : 999;
+  const autoUnused = daysSinceVisit >= 7 && !flag;
 
   function open(e) {
     if (e) e.preventDefault();
@@ -266,6 +270,9 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                 })}
               </div>
             )}
+            {flag==="low_quality" && <span style={{ fontSize:10, fontWeight:600, color:"#d97706", background:"#fef3c7", borderRadius:20, padding:"1px 7px", marginTop:4, display:"inline-block" }}>⚠️ Low quality</span>}
+            {flag==="not_using" && <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", borderRadius:20, padding:"1px 7px", marginTop:4, display:"inline-block" }}>💤 Not using</span>}
+            {autoUnused && <span style={{ fontSize:10, fontWeight:600, color:"#9ca3af", background:"#f9fafb", borderRadius:20, padding:"1px 7px", marginTop:4, display:"inline-block" }}>⏱ Unused {daysSinceVisit}d</span>}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
             {lv && <span style={{ fontSize:11, color:"#c7c7c7" }}>{timeAgo(lv)}</span>}
@@ -298,10 +305,11 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
               {/* source name */}
               <div style={{ padding:"8px 20px 14px", borderBottom:"1px solid #f2f2f2", display:"flex", alignItems:"center", gap:10 }}>
                 <Avatar name={a.username} size={36} />
-                <div>
+                <div style={{ flex:1 }}>
                   <div style={{ fontWeight:700, fontSize:14 }}>@{a.username}</div>
-                  <div style={{ fontSize:12, color:"#a1a1aa" }}>Assign to categories</div>
+                  <div style={{ fontSize:12, color:"#a1a1aa" }}>Manage source</div>
                 </div>
+                {flag && <span style={{ fontSize:11, fontWeight:600, color: flag==="low_quality"?"#d97706":"#6b7280", background: flag==="low_quality"?"#fef3c7":"#f3f4f6", borderRadius:20, padding:"2px 8px" }}>{flag==="low_quality"?"⚠️ Low quality":"💤 Not using"}</span>}
               </div>
 
               {/* category list */}
@@ -330,6 +338,26 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                   );
                 })}
               </div>
+
+              {/* flag section */}
+              {canFlag && (
+                <div style={{ padding:"12px 20px", borderTop:"1px solid #f2f2f2" }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>Mark as</div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button
+                      onClick={()=>onFlag(a.id, flag==="low_quality" ? "" : "low_quality")}
+                      style={{ flex:1, background: flag==="low_quality"?"#fef3c7":"#f9fafb", border: flag==="low_quality"?"1.5px solid #f59e0b":"1.5px solid #e5e5e5", borderRadius:10, padding:"10px 8px", fontSize:13, fontWeight:600, color: flag==="low_quality"?"#d97706":"#71717a", cursor:"pointer" }}>
+                      ⚠️ Low quality
+                    </button>
+                    <button
+                      onClick={()=>onFlag(a.id, flag==="not_using" ? "" : "not_using")}
+                      style={{ flex:1, background: flag==="not_using"?"#f3f4f6":"#f9fafb", border: flag==="not_using"?"1.5px solid #9ca3af":"1.5px solid #e5e5e5", borderRadius:10, padding:"10px 8px", fontSize:13, fontWeight:600, color: flag==="not_using"?"#374151":"#71717a", cursor:"pointer" }}>
+                      💤 Not using
+                    </button>
+                  </div>
+                  {flag && <button onClick={()=>onFlag(a.id,"")} style={{ width:"100%", background:"none", border:"none", fontSize:12, color:"#a1a1aa", marginTop:6, cursor:"pointer", padding:"4px" }}>Clear flag</button>}
+                </div>
+              )}
 
               {/* actions */}
               <div style={{ padding:"12px 20px 8px", borderTop:"1px solid #f2f2f2" }}>
@@ -493,6 +521,11 @@ export default function App() {
   const [newCatName, setNewCatName] = useState("");
   const [savingCat, setSavingCat] = useState(false);
   const [catMenuSource, setCatMenuSource] = useState(null);
+  const [aiMessages, setAiMessages] = useState([{role:"assistant", text:"Hey Abhi! 👋 I'm your ContentVault assistant. Ask me anything about your data — who owns what, check if an account is taken, see all sources, find flagged accounts, whatever you need. I'll pull the latest info from Firebase and tell you instantly."}]);
+  const [aiInput, setAiInput] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const aiBottomRef = useRef(null);
+  const aiInputRef = useRef(null);
   const [adminTab, setAdminTab] = useState("accounts");
   const [browseExpanded, setBrowseExpanded] = useState(null);
   const [products, setProducts] = useState([]);
@@ -526,6 +559,7 @@ export default function App() {
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, loading]);
+  useEffect(() => { aiBottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [aiMessages, aiLoading]);
 
   useEffect(() => {
     if (!user) return;
@@ -670,6 +704,11 @@ export default function App() {
     setAccounts(prev => prev.map(a => a.id===sourceId ? {...a, categories: updated.join(",")} : a));
   }
 
+  async function handleFlag(id, flagValue) {
+    await fsPatch("sources", id, { flag: flagValue });
+    setAccounts(prev => prev.map(a => a.id===id ? {...a, flag:flagValue} : a));
+  }
+
   async function handleVisit(id) {
     const now = new Date().toISOString();
     const k = `lastVisit_${user.username}`;
@@ -737,6 +776,79 @@ export default function App() {
   }
 
   function handleAuthKey(e) { if (e.key==="Enter") authScreen==="login" ? handleLogin() : handleSignup(); }
+  async function handleAiQuery() {
+    const text = aiInput.trim();
+    if (!text || aiLoading) return;
+    setAiInput("");
+    const hist = [...aiMessages, {role:"user", text}];
+    setAiMessages(hist);
+    setAiLoading(true);
+
+    try {
+      // fetch fresh data from Firebase
+      const [freshSources, freshUsers, freshCats] = await Promise.all([
+        fsGet("sources"),
+        fsGet("users"),
+        fsGet(`cats_${user.username}`)
+      ]);
+
+      // build a rich context snapshot
+      const totalSources = freshSources.length;
+      const byOwner = {};
+      freshSources.forEach(s => {
+        if (!byOwner[s.owner]) byOwner[s.owner] = [];
+        byOwner[s.owner].push(s.username);
+      });
+      const flagged = freshSources.filter(s => s.flag);
+      const unused = freshSources.filter(s => {
+        const lv = s.lastVisited;
+        return !s.flag && lv && Math.floor((Date.now()-new Date(lv).getTime())/86400000) >= 7;
+      });
+      const neverVisited = freshSources.filter(s => !s.lastVisited);
+
+      const systemPrompt = `You are an AI assistant for ContentVault, a team content sourcing tool. You have READ-ONLY access to the live database. Answer the owner's questions about their data clearly and concisely.
+
+LIVE DATABASE SNAPSHOT:
+Total sources: ${totalSources}
+Team members: ${freshUsers.map(u=>`${u.displayName} (${u.role})`).join(", ")||"none"}
+
+Sources by owner:
+${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("
+")||"No sources yet"}
+
+Categories (owner's): ${freshCats.map(c=>c.name).join(", ")||"none"}
+
+Flagged sources: ${flagged.map(s=>`@${s.username} (${s.flag}, owned by ${s.owner})`).join(", ")||"none"}
+Unused 7+ days: ${unused.map(s=>`@${s.username} (${s.owner})`).join(", ")||"none"}
+Never visited: ${neverVisited.map(s=>`@${s.username} (${s.owner})`).join(", ")||"none"}
+
+Rules:
+- You can only READ data, not make changes
+- If asked to make changes, tell the user to use the app's Chat tab or Sources page
+- Be concise and direct — this is a busy business owner
+- Format lists cleanly
+- If asked "who has @username" scan the sources list above`;
+
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 600,
+          system: systemPrompt,
+          messages: hist.map(m=>({ role: m.role==="assistant"?"assistant":"user", content: m.text })),
+        }),
+      });
+      const raw = await res.json();
+      const reply = raw.content?.[0]?.text || "Something went wrong, try again.";
+      setAiMessages([...hist, {role:"assistant", text:reply}]);
+    } catch {
+      setAiMessages([...hist, {role:"assistant", text:"Couldn't reach the database right now. Try again in a moment."}]);
+    }
+    setAiLoading(false);
+    setTimeout(()=>aiInputRef.current?.focus(), 50);
+  }
+
   function logout() {
     localStorage.removeItem("cv_user");
     setUser(null); setNameInput(""); setPassInput(""); setAuthError(""); setMessages([]);
@@ -876,6 +988,7 @@ export default function App() {
     {id:"winning",  label:"Winning",  show:true},
     {id:"chat",     label:"Chat",     show:canEdit(user.role)},
     {id:"admin",    label:"Admin",    show:canSeeAll(user.role)},
+    {id:"aiadmin",  label:"AI Admin", show:user.role==="owner"},
     {id:"profile",  label:"Profile",  show:true},
   ].filter(n=>n.show);
 
@@ -908,7 +1021,7 @@ export default function App() {
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{ flex:1, background:"none", border:"none", padding:"10px 0 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
               <span style={{ fontSize:18 }}>
-                {n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":"👤"}
+                {n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":n.id==="aiadmin"?"🤖":"👤"}
               </span>
               <span style={{ fontSize:10, color:page===n.id?"#18181b":"#a1a1aa", fontWeight:page===n.id?600:400 }}>{n.label}</span>
             </button>
@@ -1023,12 +1136,18 @@ export default function App() {
                     <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>Switch to List view and tap ⋯ on a source to assign it.</div>
                   </div>
                 ) : catSources.map(a=>(
-                  <SourceRow key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
+                  <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
                     onRemove={removeAccount}
                     canRemove={a.owner===user.displayName||canRemoveAll(user.role)}
                     userChannels={a.owner===user.displayName ? userChannels : null}
                     onPostedTo={updatePostedTo}
                     isMobile={isMobile}
+                    categories={categories}
+                    onToggleCat={toggleSourceCategory}
+                    catMenuSource={catMenuSource}
+                    setCatMenuSource={setCatMenuSource}
+                    onFlag={handleFlag}
+                    canFlag={user.role==="owner"}
                   />
                 ));
               })()}
@@ -1067,6 +1186,8 @@ export default function App() {
                     onToggleCat={toggleSourceCategory}
                     catMenuSource={catMenuSource}
                     setCatMenuSource={setCatMenuSource}
+                    onFlag={handleFlag}
+                    canFlag={user.role==="owner"}
                   />
                 ))}
               </div>
@@ -1315,6 +1436,76 @@ export default function App() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── AI ADMIN ── */}
+      {page==="aiadmin" && user.role==="owner" && (
+        <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile?70:0, maxWidth:680, width:"100%", margin:"0 auto" }}>
+          {/* header */}
+          <div style={{ padding:`12px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:"#18181b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🤖</div>
+              <div>
+                <div style={{ fontWeight:700, fontSize:14 }}>AI Admin</div>
+                <div style={{ fontSize:12, color:"#a1a1aa" }}>Ask me anything about your ContentVault data</div>
+              </div>
+            </div>
+          </div>
+
+          {/* messages */}
+          <div style={{ flex:1, overflow:"auto", padding:`16px ${isMobile?14:20}px 8px` }}>
+            {aiMessages.map((m,i)=>(
+              <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start", marginBottom:12, alignItems:"flex-end", gap:8 }}>
+                {m.role==="assistant" && (
+                  <div style={{ width:28, height:28, borderRadius:8, background:"#18181b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>🤖</div>
+                )}
+                <div style={{ maxWidth:"82%", background:m.role==="user"?"#18181b":"#fff", color:m.role==="user"?"#fff":"#18181b", borderRadius:m.role==="user"?"16px 16px 3px 16px":"16px 16px 16px 3px", padding:"10px 14px", fontSize:14, lineHeight:1.6, border:m.role==="assistant"?"1px solid #ebebeb":"none", whiteSpace:"pre-wrap" }}>{m.text}</div>
+                {m.role==="user" && (
+                  <div style={{ width:28, height:28, borderRadius:"50%", background:color, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:700, fontSize:12, flexShrink:0 }}>{user.displayName[0].toUpperCase()}</div>
+                )}
+              </div>
+            ))}
+            {aiLoading && (
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:12 }}>
+                <div style={{ width:28, height:28, borderRadius:8, background:"#18181b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>🤖</div>
+                <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:"16px 16px 16px 3px", padding:"12px 16px", display:"flex", gap:4 }}>
+                  {[0,1,2].map(d=><span key={d} style={{ width:5, height:5, borderRadius:"50%", background:"#a1a1aa", display:"inline-block", animation:`bounce 1s ${d*.2}s infinite` }}/>)}
+                </div>
+              </div>
+            )}
+            <div ref={aiBottomRef}/>
+          </div>
+
+          {/* quick questions */}
+          <div style={{ padding:`6px ${isMobile?14:20}px`, display:"flex", gap:6, flexWrap:"wrap", borderTop:"1px solid #f2f2f2" }}>
+            {[
+              "Who has the most sources?",
+              "Show all flagged accounts",
+              "Who hasn't visited sources in 7+ days?",
+              "How many sources does Sakshi have?",
+              "Is @username taken?",
+              "Show unused accounts",
+            ].map(q=>(
+              <button key={q} onClick={()=>{ setAiInput(q); aiInputRef.current?.focus(); }}
+                style={{ background:"#f4f4f5", border:"none", borderRadius:6, padding:"5px 10px", color:"#71717a", fontSize:12, cursor:"pointer", whiteSpace:"nowrap" }}>{q}</button>
+            ))}
+          </div>
+
+          {/* input */}
+          <div style={{ display:"flex", gap:8, padding:`10px ${isMobile?14:20}px 14px`, borderTop:"1px solid #ebebeb", background:"#fff" }}>
+            <textarea
+              ref={aiInputRef}
+              value={aiInput}
+              onChange={e=>setAiInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleAiQuery();} }}
+              placeholder="Ask anything — who has @nike, show flagged accounts, Sakshi's sources..."
+              rows={1}
+              style={{ flex:1, background:"#f4f4f5", border:"none", borderRadius:10, padding:"10px 12px", color:"#18181b", fontSize:14, resize:"none", fontFamily:"inherit", outline:"none", lineHeight:1.5 }}
+            />
+            <button onClick={handleAiQuery} disabled={aiLoading||!aiInput.trim()}
+              style={{ background:aiLoading||!aiInput.trim()?"#f4f4f5":"#18181b", color:aiLoading||!aiInput.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:10, width:42, height:42, cursor:aiLoading||!aiInput.trim()?"not-allowed":"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, alignSelf:"flex-end", transition:"all .15s" }}>↑</button>
           </div>
         </div>
       )}
