@@ -813,8 +813,7 @@ Total sources: ${totalSources}
 Team members: ${freshUsers.map(u=>`${u.displayName} (${u.role})`).join(", ")||"none"}
 
 Sources by owner:
-${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("
-")||"No sources yet"}
+${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("\n")||"No sources yet"}
 
 Categories (owner's): ${freshCats.map(c=>c.name).join(", ")||"none"}
 
