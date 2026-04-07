@@ -830,7 +830,7 @@ Rules:
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": process.env.REACT_APP_ANTHROPIC_KEY||"", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 600,
@@ -1203,9 +1203,9 @@ Rules:
             <div style={{ fontSize:13, color:"#a1a1aa", marginTop:2 }}>Tap a name to see their sources</div>
           </div>
           <div style={{ background:"#fff" }}>
-            {users.filter(u=>u.role==="teammate").length===0 ? (
+            {users.filter(u=>u.role==="teammate"||u.role==="owner").length===0 ? (
               <div style={{ padding:"60px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No teammates yet.</div>
-            ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
+            ) : users.filter(u=>u.role==="teammate"||u.role==="owner").sort((a,b)=>a.role==="owner"?-1:1).map((u,i,arr)=>{
               const uAccounts = accounts.filter(a=>a.owner===u.displayName);
               const isOpen = browseExpanded===u.id;
               const nc = nameColor(u.displayName);
