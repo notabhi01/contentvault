@@ -18,35 +18,58 @@ function canBrowse(r)    { return r === "owner" || r === "manager" || r === "lin
 function canEdit(r)      { return r !== "linktree"; }
 
 function toObj(doc) {
-  const id = doc.name.split("/").pop();
+  const rawId = doc.name.split("/").pop();
+  // decode percent-encoded IDs
+  let id;
+  try { id = decodeURIComponent(rawId); } catch { id = rawId; }
   const obj = { id };
   for (const [k, v] of Object.entries(doc.fields || {}))
     obj[k] = v.stringValue ?? v.booleanValue ?? null;
+  // prefer stored _id if present
+  if (obj._id) obj.id = obj._id;
   return obj;
 }
 async function fsGet(col) {
   try {
-    const r = await fetch(`${FS}/${col}?key=${FB.apiKey}`);
-    const d = await r.json();
-    return (d.documents || []).map(toObj);
+    let all = [];
+    let pageToken = null;
+    do {
+      const url = `${FS}/${col}?key=${FB.apiKey}&pageSize=500${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
+      const r = await fetch(url);
+      const d = await r.json();
+      if (Array.isArray(d)) {
+        // runQuery returns array
+        all = [...all, ...d.filter(item=>item.document).map(item=>toObj(item.document))];
+        pageToken = null;
+      } else {
+        if (d.documents) all = [...all, ...d.documents.map(toObj)];
+        pageToken = d.nextPageToken || null;
+      }
+    } while (pageToken);
+    return all;
   } catch { return []; }
 }
 async function fsSet(col, id, data) {
   const fields = {};
   for (const [k, v] of Object.entries(data)) fields[k] = { stringValue: String(v) };
-  await fetch(`${FS}/${col}/${id}?key=${FB.apiKey}`, {
+  // sanitize id — remove any chars Firebase doesn't allow in doc IDs
+  const safeId = id.replace(/[\/\.#$\[\]]/g, "_").slice(0, 1500);
+  const r = await fetch(`${FS}/${col}/${encodeURIComponent(safeId)}?key=${FB.apiKey}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields: { ...fields, _id: { stringValue: safeId } } }),
   });
+  return r.ok;
 }
 async function fsDelete(col, id) {
-  await fetch(`${FS}/${col}/${id}?key=${FB.apiKey}`, { method: "DELETE" });
+  const safeId = id.replace(/[\/\.#$\[\]]/g, "_").slice(0, 1500);
+  await fetch(`${FS}/${col}/${encodeURIComponent(safeId)}?key=${FB.apiKey}`, { method: "DELETE" });
 }
 async function fsPatch(col, id, data) {
   const fields = {};
   for (const [k, v] of Object.entries(data)) fields[k] = { stringValue: String(v) };
   const mask = Object.keys(data).map(k => `updateMask.fieldPaths=${k}`).join("&");
-  await fetch(`${FS}/${col}/${id}?key=${FB.apiKey}&${mask}`, {
+  const safeId = id.replace(/[\/\.#$\[\]]/g, "_").slice(0, 1500);
+  await fetch(`${FS}/${col}/${encodeURIComponent(safeId)}?key=${FB.apiKey}&${mask}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields }),
   });
@@ -813,7 +836,8 @@ Total sources: ${totalSources}
 Team members: ${freshUsers.map(u=>`${u.displayName} (${u.role})`).join(", ")||"none"}
 
 Sources by owner:
-${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("\n")||"No sources yet"}
+${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("
+")||"No sources yet"}
 
 Categories (owner's): ${freshCats.map(c=>c.name).join(", ")||"none"}
 
@@ -830,7 +854,7 @@ Rules:
 
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": process.env.REACT_APP_ANTHROPIC_KEY||"", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
           max_tokens: 600,
@@ -1203,9 +1227,9 @@ Rules:
             <div style={{ fontSize:13, color:"#a1a1aa", marginTop:2 }}>Tap a name to see their sources</div>
           </div>
           <div style={{ background:"#fff" }}>
-            {users.filter(u=>u.role==="teammate"||u.role==="owner").length===0 ? (
+            {users.filter(u=>u.role==="teammate").length===0 ? (
               <div style={{ padding:"60px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No teammates yet.</div>
-            ) : users.filter(u=>u.role==="teammate"||u.role==="owner").sort((a,b)=>a.role==="owner"?-1:1).map((u,i,arr)=>{
+            ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
               const uAccounts = accounts.filter(a=>a.owner===u.displayName);
               const isOpen = browseExpanded===u.id;
               const nc = nameColor(u.displayName);
