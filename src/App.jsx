@@ -19,14 +19,11 @@ function canEdit(r)      { return r !== "linktree"; }
 
 function toObj(doc) {
   const rawId = doc.name.split("/").pop();
-  // decode percent-encoded IDs
   let id;
   try { id = decodeURIComponent(rawId); } catch { id = rawId; }
   const obj = { id };
   for (const [k, v] of Object.entries(doc.fields || {}))
     obj[k] = v.stringValue ?? v.booleanValue ?? null;
-  // prefer stored _id if present
-  if (obj._id) obj.id = obj._id;
   return obj;
 }
 async function fsGet(col) {
@@ -52,24 +49,19 @@ async function fsGet(col) {
 async function fsSet(col, id, data) {
   const fields = {};
   for (const [k, v] of Object.entries(data)) fields[k] = { stringValue: String(v) };
-  // sanitize id — remove any chars Firebase doesn't allow in doc IDs
-  const safeId = id.replace(/[\/\.#$\[\]]/g, "_").slice(0, 1500);
-  const r = await fetch(`${FS}/${col}/${encodeURIComponent(safeId)}?key=${FB.apiKey}`, {
+  await fetch(`${FS}/${col}/${encodeURIComponent(id)}?key=${FB.apiKey}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fields: { ...fields, _id: { stringValue: safeId } } }),
+    body: JSON.stringify({ fields }),
   });
-  return r.ok;
 }
 async function fsDelete(col, id) {
-  const safeId = id.replace(/[\/\.#$\[\]]/g, "_").slice(0, 1500);
-  await fetch(`${FS}/${col}/${encodeURIComponent(safeId)}?key=${FB.apiKey}`, { method: "DELETE" });
+  await fetch(`${FS}/${col}/${encodeURIComponent(id)}?key=${FB.apiKey}`, { method: "DELETE" });
 }
 async function fsPatch(col, id, data) {
   const fields = {};
   for (const [k, v] of Object.entries(data)) fields[k] = { stringValue: String(v) };
   const mask = Object.keys(data).map(k => `updateMask.fieldPaths=${k}`).join("&");
-  const safeId = id.replace(/[\/\.#$\[\]]/g, "_").slice(0, 1500);
-  await fetch(`${FS}/${col}/${encodeURIComponent(safeId)}?key=${FB.apiKey}&${mask}`, {
+  await fetch(`${FS}/${col}/${encodeURIComponent(id)}?key=${FB.apiKey}&${mask}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields }),
   });
@@ -836,8 +828,7 @@ Total sources: ${totalSources}
 Team members: ${freshUsers.map(u=>`${u.displayName} (${u.role})`).join(", ")||"none"}
 
 Sources by owner:
-${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("
-")||"No sources yet"}
+${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("\n")||"No sources yet"}
 
 Categories (owner's): ${freshCats.map(c=>c.name).join(", ")||"none"}
 
