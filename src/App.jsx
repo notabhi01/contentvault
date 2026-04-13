@@ -873,7 +873,7 @@ export default function App() {
   const visitKey = user ? `lastVisit_${user.username}` : "";
   const color = user ? ROLE_COLORS[user.role] : "#18181b";
 
-  const sourceBase = (canSeeAll(user.role) && showAll) ? accounts : myAccounts;
+  const sourceBase = (user && canSeeAll(user.role) && showAll) ? accounts : myAccounts;
   const sourceList = sourceBase
     .filter(a => !searchQuery || a.username.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a,b) => (a.username||"").localeCompare(b.username||""));
