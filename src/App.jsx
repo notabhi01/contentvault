@@ -244,7 +244,7 @@ function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, on
 }
 
 // ─── SourceRowWithCat — list row with category assign ────────
-function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource, onFlag, canFlag }) {
+function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource, onFlag, canFlag, showOwner }) {
   const lv = a[visitKey] || a.lastVisited;
   const selected = a.postedTo || "";
   const chObj = (userChannels||[]).find(c => c.name === selected);
@@ -272,7 +272,7 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
           <div style={{ flex:1, minWidth:0 }} onClick={open}>
             <div style={{ fontWeight:600, fontSize:14, color:"#18181b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
             <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {selected ? selected : "instagram.com/" + a.username}
+              {showOwner ? (a.owner||"unknown") : (selected ? selected : "instagram.com/" + a.username)}
             </div>
             {assignedCats.length > 0 && (
               <div style={{ display:"flex", gap:4, marginTop:4, flexWrap:"wrap" }}>
@@ -415,6 +415,7 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
           </div>
         )}
       </div>
+      {showOwner && <div style={{ width:110, fontSize:12, color:"#6366f1", fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.owner||"—"}</div>}
       <div style={{ width:200, display:"flex", alignItems:"center", gap:6 }}>
         {userChannels !== null ? (
           <>
@@ -542,6 +543,7 @@ export default function App() {
   const aiBottomRef = useRef(null);
   const aiInputRef = useRef(null);
   const [adminTab, setAdminTab] = useState("accounts");
+  const [showAll, setShowAll] = useState(false);
   const [browseExpanded, setBrowseExpanded] = useState(null);
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -941,7 +943,8 @@ Rules:
   const visitKey = user ? `lastVisit_${user.username}` : "";
   const color = user ? ROLE_COLORS[user.role] : "#18181b";
 
-  const sourceList = myAccounts
+  const sourceBase = (canSeeAll(user.role) && showAll) ? accounts : myAccounts;
+  const sourceList = sourceBase
     .filter(a => !searchQuery || a.username.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a,b) => (a.username||"").localeCompare(b.username||""));
 
@@ -1002,7 +1005,7 @@ Rules:
     {id:"winning",  label:"Winning",  show:true},
     {id:"chat",     label:"Chat",     show:canEdit(user.role)},
     {id:"admin",    label:"Admin",    show:canSeeAll(user.role)},
-    {id:"aiadmin",  label:"AI Admin", show:user.role==="owner"},
+
     {id:"profile",  label:"Profile",  show:true},
   ].filter(n=>n.show);
 
@@ -1056,7 +1059,14 @@ Rules:
                 </button>
               ) : (
                 <>
-                  <span style={{ fontSize:14, fontWeight:600 }}>My Sources</span>
+                  {canSeeAll(user.role) ? (
+                    <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
+                      <button onClick={()=>setShowAll(false)} style={{ background:!showAll?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:!showAll?600:400, color:!showAll?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:!showAll?"0 1px 3px rgba(0,0,0,0.08)":"none", whiteSpace:"nowrap" }}>My Sources</button>
+                      <button onClick={()=>setShowAll(true)} style={{ background:showAll?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:showAll?600:400, color:showAll?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:showAll?"0 1px 3px rgba(0,0,0,0.08)":"none", whiteSpace:"nowrap" }}>Everyone</button>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize:14, fontWeight:600 }}>My Sources</span>
+                  )}
                   <span style={{ fontSize:12, color:"#a1a1aa", background:"#f4f4f5", borderRadius:4, padding:"1px 7px" }}>{sourceList.length}</span>
                 </>
               )}
@@ -1176,6 +1186,7 @@ Rules:
                 <div style={{ display:"flex", alignItems:"center", padding:"7px 20px", borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
                   <div style={{ width:48, flexShrink:0 }} />
                   <div style={{ flex:1, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Account</div>
+                  {showAll && <div style={{ width:110, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Owner</div>}
                   <div style={{ width:200, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Posted to</div>
                   <div style={{ width:100, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Added</div>
                   <div style={{ width:90, fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5 }}>Last visited</div>
@@ -1202,6 +1213,7 @@ Rules:
                     setCatMenuSource={setCatMenuSource}
                     onFlag={handleFlag}
                     canFlag={user.role==="owner"}
+                    showOwner={showAll}
                   />
                 ))}
               </div>
