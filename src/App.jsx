@@ -793,77 +793,7 @@ export default function App() {
   }
 
   function handleAuthKey(e) { if (e.key==="Enter") authScreen==="login" ? handleLogin() : handleSignup(); }
-  async function handleAiQuery() {
-    const text = aiInput.trim();
-    if (!text || aiLoading) return;
-    setAiInput("");
-    const hist = [...aiMessages, {role:"user", text}];
-    setAiMessages(hist);
-    setAiLoading(true);
 
-    try {
-      // fetch fresh data from Firebase
-      const [freshSources, freshUsers, freshCats] = await Promise.all([
-        fsGet("sources"),
-        fsGet("users"),
-        fsGet(`cats_${user.username}`)
-      ]);
-
-      // build a rich context snapshot
-      const totalSources = freshSources.length;
-      const byOwner = {};
-      freshSources.forEach(s => {
-        if (!byOwner[s.owner]) byOwner[s.owner] = [];
-        byOwner[s.owner].push(s.username);
-      });
-      const flagged = freshSources.filter(s => s.flag);
-      const unused = freshSources.filter(s => {
-        const lv = s.lastVisited;
-        return !s.flag && lv && Math.floor((Date.now()-new Date(lv).getTime())/86400000) >= 7;
-      });
-      const neverVisited = freshSources.filter(s => !s.lastVisited);
-
-      const systemPrompt = `You are an AI assistant for ContentVault, a team content sourcing tool. You have READ-ONLY access to the live database. Answer the owner's questions about their data clearly and concisely.
-
-LIVE DATABASE SNAPSHOT:
-Total sources: ${totalSources}
-Team members: ${freshUsers.map(u=>`${u.displayName} (${u.role})`).join(", ")||"none"}
-
-Sources by owner:
-${Object.entries(byOwner).map(([owner, accs])=>`${owner}: ${accs.join(", ")}`).join("\n")||"No sources yet"}
-
-Categories (owner's): ${freshCats.map(c=>c.name).join(", ")||"none"}
-
-Flagged sources: ${flagged.map(s=>`@${s.username} (${s.flag}, owned by ${s.owner})`).join(", ")||"none"}
-Unused 7+ days: ${unused.map(s=>`@${s.username} (${s.owner})`).join(", ")||"none"}
-Never visited: ${neverVisited.map(s=>`@${s.username} (${s.owner})`).join(", ")||"none"}
-
-Rules:
-- You can only READ data, not make changes
-- If asked to make changes, tell the user to use the app's Chat tab or Sources page
-- Be concise and direct — this is a busy business owner
-- Format lists cleanly
-- If asked "who has @username" scan the sources list above`;
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 600,
-          system: systemPrompt,
-          messages: hist.map(m=>({ role: m.role==="assistant"?"assistant":"user", content: m.text })),
-        }),
-      });
-      const raw = await res.json();
-      const reply = raw.content?.[0]?.text || "Something went wrong, try again.";
-      setAiMessages([...hist, {role:"assistant", text:reply}]);
-    } catch {
-      setAiMessages([...hist, {role:"assistant", text:"Couldn't reach the database right now. Try again in a moment."}]);
-    }
-    setAiLoading(false);
-    setTimeout(()=>aiInputRef.current?.focus(), 50);
-  }
 
   function logout() {
     localStorage.removeItem("cv_user");
