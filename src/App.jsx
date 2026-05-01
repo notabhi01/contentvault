@@ -35,7 +35,6 @@ async function fsGet(col) {
       const r = await fetch(url);
       const d = await r.json();
       if (Array.isArray(d)) {
-        // runQuery returns array
         all = [...all, ...d.filter(item=>item.document).map(item=>toObj(item.document))];
         pageToken = null;
       } else {
@@ -76,17 +75,14 @@ function extractUsername(raw) {
   return null;
 }
 
-// extract ALL usernames/links from a message
 function extractAllUsernames(text) {
   const found = [];
-  // all instagram.com/... URLs
   const urlRegex = /instagram\.com\/(?:_u\/)?([a-zA-Z0-9._]+)/gi;
   let m;
   while ((m = urlRegex.exec(text)) !== null) {
     const u = m[1].toLowerCase().replace(/\/$/, "");
     if (u && !found.includes(u)) found.push(u);
   }
-  // all @handles not already found
   const atRegex = /@([a-zA-Z0-9._]+)/g;
   while ((m = atRegex.exec(text)) !== null) {
     const u = m[1].toLowerCase();
@@ -122,7 +118,6 @@ function useIsMobile() {
   return mobile;
 }
 
-// ─── Category helpers ────────────────────────────────────────
 const CAT_GRADIENTS = [
   "linear-gradient(135deg,#667eea,#764ba2)",
   "linear-gradient(135deg,#f093fb,#f5576c)",
@@ -146,7 +141,6 @@ function catStyle(name) {
   return { grad, emoji };
 }
 
-// ─── Avatar ───────────────────────────────────────────────────
 function Avatar({ name, size = 44 }) {
   const c = nameColor(name);
   return (
@@ -159,7 +153,6 @@ function Avatar({ name, size = 44 }) {
   );
 }
 
-// ─── Source Row ───────────────────────────────────────────────
 function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile }) {
   const lv = a[visitKey] || a.lastVisited;
   const selected = a.postedTo || "";
@@ -199,7 +192,6 @@ function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, on
     );
   }
 
-  // desktop
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "9px 20px", borderBottom: "1px solid #f2f2f2", background: "#fff", transition: "background .1s" }}
       onMouseEnter={e => e.currentTarget.style.background = "#fafaf9"}
@@ -213,7 +205,6 @@ function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, on
           onMouseLeave={e => e.target.style.textDecoration = "none"}
         >instagram.com/{a.username}</a>
       </div>
-      {/* posted to */}
       <div style={{ width: 200, display: "flex", alignItems: "center", gap: 6 }}>
         {userChannels !== null ? (
           <>
@@ -243,14 +234,13 @@ function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, on
   );
 }
 
-// ─── SourceRowWithCat — list row with category assign ────────
 function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource, onFlag, canFlag, showOwner }) {
   const lv = a[visitKey] || a.lastVisited;
   const selected = a.postedTo || "";
   const chObj = (userChannels||[]).find(c => c.name === selected);
   const assignedCats = a.categories ? a.categories.split(",").filter(Boolean) : [];
   const menuOpen = catMenuSource === a.id;
-  const flag = a.flag || ""; // "low_quality" | "not_using" | ""
+  const flag = a.flag || "";
   const lv2 = a[visitKey] || a.lastVisited;
   const daysSinceVisit = lv2 ? Math.floor((Date.now() - new Date(lv2).getTime()) / 86400000) : 999;
   const autoUnused = daysSinceVisit >= 7 && !flag;
@@ -264,7 +254,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
   if (isMobile) {
     return (
       <>
-        {/* row */}
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 16px", borderBottom:"1px solid #f2f2f2", background:"#fff" }}>
           <div onClick={open} style={{ cursor:"pointer", flexShrink:0 }}>
             <Avatar name={a.username} size={46} />
@@ -299,15 +288,12 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
           </div>
         </div>
 
-        {/* bottom sheet overlay */}
         {menuOpen && (
           <>
-            {/* backdrop */}
             <div
               onClick={()=>setCatMenuSource(null)}
               style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200 }}
             />
-            {/* sheet */}
             <div style={{
               position:"fixed", bottom:0, left:0, right:0,
               background:"#fff", borderRadius:"20px 20px 0 0",
@@ -315,9 +301,7 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
               boxShadow:"0 -4px 30px rgba(0,0,0,0.15)",
               animation:"slideUp .22s ease-out",
             }}>
-              {/* handle */}
               <div style={{ width:40, height:4, background:"#e5e5e5", borderRadius:99, margin:"12px auto 4px" }} />
-              {/* source name */}
               <div style={{ padding:"8px 20px 14px", borderBottom:"1px solid #f2f2f2", display:"flex", alignItems:"center", gap:10 }}>
                 <Avatar name={a.username} size={36} />
                 <div style={{ flex:1 }}>
@@ -327,7 +311,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                 {flag && <span style={{ fontSize:11, fontWeight:600, color: flag==="low_quality"?"#d97706":"#6b7280", background: flag==="low_quality"?"#fef3c7":"#f3f4f6", borderRadius:20, padding:"2px 8px" }}>{flag==="low_quality"?"⚠️ Low quality":"💤 Not using"}</span>}
               </div>
 
-              {/* category list */}
               <div style={{ maxHeight:300, overflowY:"auto" }}>
                 {categories.length === 0 ? (
                   <div style={{ padding:"24px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
@@ -354,7 +337,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                 })}
               </div>
 
-              {/* flag section */}
               {canFlag && (
                 <div style={{ padding:"12px 20px", borderTop:"1px solid #f2f2f2" }}>
                   <div style={{ fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>Mark as</div>
@@ -374,7 +356,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                 </div>
               )}
 
-              {/* actions */}
               <div style={{ padding:"12px 20px 8px", borderTop:"1px solid #f2f2f2" }}>
                 {canRemove && (
                   <button onClick={()=>{ if(window.confirm(`Remove @${a.username}?`)) { onRemove(a.id); setCatMenuSource(null); } }}
@@ -394,7 +375,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
     );
   }
 
-  // desktop
   return (
     <div style={{ display:"flex", alignItems:"center", padding:"9px 20px", borderBottom:"1px solid #f2f2f2", background:"#fff", transition:"background .1s", position:"relative" }}
       onMouseEnter={e=>e.currentTarget.style.background="#fafaf9"}
@@ -431,7 +411,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
       </div>
       <div style={{ width:100, fontSize:12, color:"#a1a1aa" }}>{a.addedAt||"—"}</div>
       <div style={{ width:90, fontSize:12, color:lv?"#71717a":"#d4d4d4" }}>{lv?timeAgo(lv):"Never"}</div>
-      {/* category + remove */}
       <div style={{ width:120, display:"flex", alignItems:"center", justifyContent:"flex-end", gap:6, position:"relative" }}>
         {categories.length > 0 && (
           <div style={{ position:"relative" }}>
@@ -470,7 +449,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
   );
 }
 
-// ─── local bot ────────────────────────────────────────────────
 function localBot(text, user, accounts) {
   const lower = text.toLowerCase().trim();
   const mine = accounts.filter(a => a.owner === user.displayName);
@@ -512,7 +490,6 @@ function localBot(text, user, accounts) {
   return { action:"chat", reply:`Send me an Instagram link or @username to add it.` };
 }
 
-// ═══════════════════════════════════════════════════════════════
 export default function App() {
   const isMobile = useIsMobile();
   const [authScreen, setAuthScreen] = useState("login");
@@ -529,6 +506,7 @@ export default function App() {
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
   const [syncing, setSyncing] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true); // NEW: track first load
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceView, setSourceView] = useState("list");
   const [categories, setCategories] = useState([]);
@@ -582,10 +560,8 @@ export default function App() {
     if (!user) return;
     refresh(); loadChannels(); loadProducts(); loadCats();
 
-    // Only poll every 5 minutes max instead of every 10s
     pollRef.current = setInterval(refresh, 5 * 60 * 1000);
 
-    // Also refresh when user comes back to the tab
     function onVisible() {
       if (document.visibilityState === "visible") refresh();
     }
@@ -597,10 +573,24 @@ export default function App() {
     };
   }, [user]);
 
+  // FIXED refresh: never overwrites existing data with empty results
   async function refresh() {
     setSyncing(true);
-    const [s,u] = await Promise.all([fsGet("sources"), fsGet("users")]);
-    setAccounts(s); setUsers(u); setSyncing(false);
+    try {
+      const [s, u] = await Promise.all([fsGet("sources"), fsGet("users")]);
+      // Only update state if we got real data back — never blank the screen on a failed/empty fetch
+      if (s.length > 0 || u.length > 0) {
+        setAccounts(s);
+        setUsers(u);
+      } else if (s.length === 0 && u.length === 0) {
+        // Both empty could be a network blip — only trust it on very first load
+        // (initialLoad true means we haven't shown data yet, safe to set empty)
+        setAccounts(prev => prev.length > 0 ? prev : s);
+        setUsers(prev => prev.length > 0 ? prev : u);
+      }
+    } catch {}
+    setInitialLoad(false);
+    setSyncing(false);
   }
 
   async function loadChannels() {
@@ -699,7 +689,6 @@ export default function App() {
   async function deleteCategory(id) {
     await fsDelete(`cats_${user.username}`, id);
     setCategories(prev => prev.filter(c => c.id !== id));
-    // remove this cat from all sources locally
     const affected = accounts.filter(a => a.owner===user.displayName && a.categories && a.categories.split(",").includes(id));
     for (const a of affected) {
       const cats = a.categories.split(",").filter(c=>c!==id).join(",");
@@ -794,11 +783,10 @@ export default function App() {
 
   function handleAuthKey(e) { if (e.key==="Enter") authScreen==="login" ? handleLogin() : handleSignup(); }
 
-
   function logout() {
     localStorage.removeItem("cv_user");
     setUser(null); setNameInput(""); setPassInput(""); setAuthError(""); setMessages([]);
-    setPage("sources"); setUserChannels([]);
+    setPage("sources"); setUserChannels([]); setInitialLoad(true);
   }
 
   async function send() {
@@ -807,17 +795,14 @@ export default function App() {
     setInput("");
     const hist = [...messages, {role:"user",text}];
     setMessages(hist); setLoading(true);
-    // use local state — no extra Firebase read
     const fresh = accounts;
     const result = localBot(text, user, fresh, categories);
     const {action, username, usernames, catName, catId, reply} = result;
 
     if (!canEdit(user.role)) {
-      // linktree read only
     } else if (action==="add" && username) {
       const entry = {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:"", categories:""};
       await fsSet("sources", username, entry);
-      // update local state directly — no re-fetch
       setAccounts(prev => [...prev.filter(a=>a.id!==username), {id:username, ...entry}]);
 
     } else if (action==="bulk_add" && usernames && usernames.length > 0) {
@@ -878,7 +863,6 @@ export default function App() {
     .filter(a => !searchQuery || a.username.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a,b) => (a.username||"").localeCompare(b.username||""));
 
-  // ── AUTH ──────────────────────────────────────────────────────
   if (!user) return (
     <div style={{ minHeight:"100vh", background:"#fafaf9", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'DM Sans',system-ui,sans-serif", padding:24 }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -935,7 +919,6 @@ export default function App() {
     {id:"winning",  label:"Winning",  show:true},
     {id:"chat",     label:"Chat",     show:canEdit(user.role)},
     {id:"admin",    label:"Admin",    show:canSeeAll(user.role)},
-
     {id:"profile",  label:"Profile",  show:true},
   ].filter(n=>n.show);
 
@@ -943,7 +926,6 @@ export default function App() {
     <div style={{ minHeight:"100vh", background:"#fafaf9", fontFamily:"'DM Sans',system-ui,sans-serif", color:"#18181b", display:"flex", flexDirection:"column" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
-      {/* ── TOP BAR ── */}
       <div style={{ background:"#fff", borderBottom:"1px solid #ebebeb", padding:`0 ${isMobile?14:20}px`, height:52, display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?10:14 }}>
           <span style={{ fontWeight:700, fontSize:15, letterSpacing:-0.3 }}>ContentVault</span>
@@ -962,7 +944,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── MOBILE BOTTOM NAV ── */}
       {isMobile && (
         <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #ebebeb", display:"flex", zIndex:20, paddingBottom:"env(safe-area-inset-bottom)" }}>
           {navItems.map(n=>(
@@ -979,8 +960,6 @@ export default function App() {
       {/* ── SOURCES ── */}
       {page==="sources" && (
         <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile ? 70 : 0 }}>
-
-          {/* toolbar */}
           <div style={{ padding:`10px ${isMobile?12:20}px`, display:"flex", alignItems:"center", gap:8, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
             <div style={{ flex:1, display:"flex", alignItems:"center", gap:8 }}>
               {activeCat ? (
@@ -1001,19 +980,16 @@ export default function App() {
                 </>
               )}
             </div>
-            {/* view toggle */}
             {!activeCat && (
               <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
                 <button onClick={()=>setSourceView("list")} style={{ background:sourceView==="list"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="list"?600:400, color:sourceView==="list"?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:sourceView==="list"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>List</button>
                 <button onClick={()=>setSourceView("categories")} style={{ background:sourceView==="categories"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="categories"?600:400, color:sourceView==="categories"?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:sourceView==="categories"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>Categories</button>
               </div>
             )}
-            {/* search — list view only */}
             {sourceView==="list" && !activeCat && (
               <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search…"
                 style={{ width: isMobile?100:160, background:"#f4f4f5", border:"none", borderRadius:8, padding:"6px 10px", color:"#18181b", fontSize:13, outline:"none", fontFamily:"inherit" }} />
             )}
-            {/* + category button */}
             {sourceView==="categories" && !activeCat && (
               <button onClick={()=>setShowNewCat(!showNewCat)} style={{ background:showNewCat?"#f4f4f5":"#18181b", color:showNewCat?"#71717a":"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 {showNewCat?"Cancel":"+ New"}
@@ -1021,7 +997,6 @@ export default function App() {
             )}
           </div>
 
-          {/* new category input */}
           {showNewCat && sourceView==="categories" && (
             <div style={{ padding:`10px ${isMobile?12:20}px`, borderBottom:"1px solid #ebebeb", background:"#fafaf9", display:"flex", gap:8 }}>
               <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="Category name (e.g. Frog Costume)"
@@ -1035,7 +1010,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ── CATEGORY CARDS VIEW ── */}
           {sourceView==="categories" && !activeCat && (
             <div style={{ flex:1, overflow:"auto", padding:`20px ${isMobile?12:20}px` }}>
               {categories.length===0 ? (
@@ -1056,17 +1030,14 @@ export default function App() {
                           onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-3px)"; e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,0.13)"; }}
                           onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)"; }}
                         >
-                          {/* gradient area */}
                           <div style={{ background:grad, height: isMobile?100:120, display:"flex", alignItems:"center", justifyContent:"center" }}>
                             <span style={{ fontSize: isMobile?40:48 }}>{emoji}</span>
                           </div>
-                          {/* info */}
                           <div style={{ background:"#fff", padding:"10px 12px 12px" }}>
                             <div style={{ fontWeight:700, fontSize: isMobile?13:14, color:"#18181b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{cat.name}</div>
                             <div style={{ fontSize:12, color:"#a1a1aa", marginTop:3 }}>{count} source{count!==1?"s":""}</div>
                           </div>
                         </div>
-                        {/* delete */}
                         <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Delete "${cat.name}"?`)) deleteCategory(cat.id); }}
                           style={{ width:"100%", background:"none", border:"none", cursor:"pointer", fontSize:11, color:"#d4d4d4", padding:"4px 0", marginTop:2 }}
                           onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>Delete</button>
@@ -1078,7 +1049,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ── CATEGORY DETAIL (sources in this category) ── */}
           {sourceView==="categories" && activeCat && (
             <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
               {(() => {
@@ -1111,7 +1081,6 @@ export default function App() {
           {/* ── LIST VIEW ── */}
           {sourceView==="list" && (
             <>
-              {/* desktop header */}
               {!isMobile && (
                 <div style={{ display:"flex", alignItems:"center", padding:"7px 20px", borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
                   <div style={{ width:48, flexShrink:0 }} />
@@ -1124,11 +1093,19 @@ export default function App() {
                 </div>
               )}
               <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
-                {sourceList.length===0 ? (
+                {/* FIXED: Show loading state on first load, never blank screen mid-sync */}
+                {initialLoad ? (
+                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                    <div style={{ fontSize:28, marginBottom:12 }}>⏳</div>
+                    <div style={{ fontSize:14 }}>Loading your sources…</div>
+                  </div>
+                ) : sourceList.length === 0 ? (
                   <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
                     <div style={{ fontSize:32, marginBottom:10 }}>—</div>
-                    <div style={{ fontSize:14 }}>{searchQuery?"No results.":"No sources yet."}</div>
-                    {canEdit(user.role)&&!searchQuery&&<button onClick={()=>setPage("chat")} style={{ marginTop:14, background:"#18181b", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>Add via chat</button>}
+                    <div style={{ fontSize:14 }}>{searchQuery ? "No results." : "No sources yet."}</div>
+                    {canEdit(user.role) && !searchQuery && (
+                      <button onClick={()=>setPage("chat")} style={{ marginTop:14, background:"#18181b", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer" }}>Add via chat</button>
+                    )}
                   </div>
                 ) : sourceList.map(a=>(
                   <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
@@ -1165,7 +1142,6 @@ export default function App() {
             ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
               const uAccounts = accounts.filter(a=>a.owner===u.displayName);
               const isOpen = browseExpanded===u.id;
-              const nc = nameColor(u.displayName);
               return (
                 <div key={u.id} style={{ borderBottom: i<arr.length-1?"1px solid #f2f2f2":"none" }}>
                   <div onClick={()=>setBrowseExpanded(isOpen?null:u.id)}
@@ -1237,7 +1213,6 @@ export default function App() {
       {/* ── WINNING PRODUCTS ── */}
       {page==="winning" && (
         <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
-          {/* header */}
           <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>Winning Products</div>
@@ -1251,7 +1226,6 @@ export default function App() {
             )}
           </div>
 
-          {/* add product form */}
           {showAddProd && canSeeAll(user.role) && (
             <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
               <div style={{ display:"flex", flexDirection:"column", gap:10, maxWidth:480 }}>
@@ -1272,7 +1246,6 @@ export default function App() {
             </div>
           )}
 
-          {/* pinterest grid */}
           <div style={{ padding:`16px ${isMobile?12:20}px` }}>
             {loadingProducts ? (
               <div style={{ textAlign:"center", padding:"60px 20px", color:"#a1a1aa", fontSize:13 }}>Loading…</div>
@@ -1283,42 +1256,23 @@ export default function App() {
                 {canSeeAll(user.role) && <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>Tap "+ Add" to add the first one.</div>}
               </div>
             ) : (
-              <div style={{
-                columns: isMobile ? 2 : 3,
-                columnGap: isMobile ? 10 : 14,
-              }}>
+              <div style={{ columns: isMobile ? 2 : 3, columnGap: isMobile ? 10 : 14 }}>
                 {products.map(p => {
                   const daysAgo = Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000);
                   const timeLabel = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
                   return (
-                    <div key={p.id} style={{
-                      breakInside: "avoid",
-                      marginBottom: isMobile ? 10 : 14,
-                      borderRadius: 14,
-                      overflow: "hidden",
-                      background: "#fff",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)",
-                      cursor: "pointer",
-                      transition: "transform .15s, box-shadow .15s",
-                      display: "inline-block",
-                      width: "100%",
-                    }}
+                    <div key={p.id} style={{ breakInside:"avoid", marginBottom: isMobile?10:14, borderRadius:14, overflow:"hidden", background:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)", cursor:"pointer", transition:"transform .15s, box-shadow .15s", display:"inline-block", width:"100%" }}
                       onClick={() => window.open(p.link, "_blank", "noreferrer")}
                       onMouseEnter={e => { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.1), 0 8px 24px rgba(0,0,0,0.06)"; }}
                       onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)"; }}
                     >
-                      {/* image */}
                       {p.imgUrl ? (
                         <div style={{ width:"100%", background:"#f4f4f5", position:"relative" }}>
-                          <img src={p.imgUrl} alt={p.name}
-                            style={{ width:"100%", display:"block", borderRadius:"14px 14px 0 0" }}
-                            onError={e => { e.target.parentElement.style.display="none"; }}
-                          />
+                          <img src={p.imgUrl} alt={p.name} style={{ width:"100%", display:"block", borderRadius:"14px 14px 0 0" }} onError={e => { e.target.parentElement.style.display="none"; }} />
                         </div>
                       ) : (
                         <div style={{ width:"100%", height:120, background:"linear-gradient(135deg,#f4f4f5,#e5e5e5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32 }}>🎬</div>
                       )}
-                      {/* info */}
                       <div style={{ padding:"10px 12px 12px" }}>
                         <div style={{ fontWeight:600, fontSize: isMobile?13:14, color:"#18181b", lineHeight:1.3, marginBottom:6 }}>{p.name}</div>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 }}>
@@ -1396,76 +1350,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ── AI ADMIN ── */}
-      {page==="aiadmin" && user.role==="owner" && (
-        <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile?70:0, maxWidth:680, width:"100%", margin:"0 auto" }}>
-          {/* header */}
-          <div style={{ padding:`12px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:36, height:36, borderRadius:10, background:"#18181b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🤖</div>
-              <div>
-                <div style={{ fontWeight:700, fontSize:14 }}>AI Admin</div>
-                <div style={{ fontSize:12, color:"#a1a1aa" }}>Ask me anything about your ContentVault data</div>
-              </div>
-            </div>
-          </div>
-
-          {/* messages */}
-          <div style={{ flex:1, overflow:"auto", padding:`16px ${isMobile?14:20}px 8px` }}>
-            {aiMessages.map((m,i)=>(
-              <div key={i} style={{ display:"flex", justifyContent:m.role==="user"?"flex-end":"flex-start", marginBottom:12, alignItems:"flex-end", gap:8 }}>
-                {m.role==="assistant" && (
-                  <div style={{ width:28, height:28, borderRadius:8, background:"#18181b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>🤖</div>
-                )}
-                <div style={{ maxWidth:"82%", background:m.role==="user"?"#18181b":"#fff", color:m.role==="user"?"#fff":"#18181b", borderRadius:m.role==="user"?"16px 16px 3px 16px":"16px 16px 16px 3px", padding:"10px 14px", fontSize:14, lineHeight:1.6, border:m.role==="assistant"?"1px solid #ebebeb":"none", whiteSpace:"pre-wrap" }}>{m.text}</div>
-                {m.role==="user" && (
-                  <div style={{ width:28, height:28, borderRadius:"50%", background:color, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:700, fontSize:12, flexShrink:0 }}>{user.displayName[0].toUpperCase()}</div>
-                )}
-              </div>
-            ))}
-            {aiLoading && (
-              <div style={{ display:"flex", alignItems:"flex-end", gap:8, marginBottom:12 }}>
-                <div style={{ width:28, height:28, borderRadius:8, background:"#18181b", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>🤖</div>
-                <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:"16px 16px 16px 3px", padding:"12px 16px", display:"flex", gap:4 }}>
-                  {[0,1,2].map(d=><span key={d} style={{ width:5, height:5, borderRadius:"50%", background:"#a1a1aa", display:"inline-block", animation:`bounce 1s ${d*.2}s infinite` }}/>)}
-                </div>
-              </div>
-            )}
-            <div ref={aiBottomRef}/>
-          </div>
-
-          {/* quick questions */}
-          <div style={{ padding:`6px ${isMobile?14:20}px`, display:"flex", gap:6, flexWrap:"wrap", borderTop:"1px solid #f2f2f2" }}>
-            {[
-              "Who has the most sources?",
-              "Show all flagged accounts",
-              "Who hasn't visited sources in 7+ days?",
-              "How many sources does Sakshi have?",
-              "Is @username taken?",
-              "Show unused accounts",
-            ].map(q=>(
-              <button key={q} onClick={()=>{ setAiInput(q); aiInputRef.current?.focus(); }}
-                style={{ background:"#f4f4f5", border:"none", borderRadius:6, padding:"5px 10px", color:"#71717a", fontSize:12, cursor:"pointer", whiteSpace:"nowrap" }}>{q}</button>
-            ))}
-          </div>
-
-          {/* input */}
-          <div style={{ display:"flex", gap:8, padding:`10px ${isMobile?14:20}px 14px`, borderTop:"1px solid #ebebeb", background:"#fff" }}>
-            <textarea
-              ref={aiInputRef}
-              value={aiInput}
-              onChange={e=>setAiInput(e.target.value)}
-              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleAiQuery();} }}
-              placeholder="Ask anything — who has @nike, show flagged accounts, Sakshi's sources..."
-              rows={1}
-              style={{ flex:1, background:"#f4f4f5", border:"none", borderRadius:10, padding:"10px 12px", color:"#18181b", fontSize:14, resize:"none", fontFamily:"inherit", outline:"none", lineHeight:1.5 }}
-            />
-            <button onClick={handleAiQuery} disabled={aiLoading||!aiInput.trim()}
-              style={{ background:aiLoading||!aiInput.trim()?"#f4f4f5":"#18181b", color:aiLoading||!aiInput.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:10, width:42, height:42, cursor:aiLoading||!aiInput.trim()?"not-allowed":"pointer", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, alignSelf:"flex-end", transition:"all .15s" }}>↑</button>
-          </div>
-        </div>
-      )}
-
       {/* ── PROFILE ── */}
       {page==="profile" && (
         <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
@@ -1480,7 +1364,6 @@ export default function App() {
           </div>
 
           <div style={{ padding:`16px ${isMobile?14:20}px`, display:"flex", flexDirection:"column", gap:16 }}>
-            {/* stats */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {[{label:"My sources",value:myAccounts.length},{label:"Team total",value:accounts.length}].map(s=>(
                 <div key={s.label} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"14px 16px" }}>
@@ -1490,7 +1373,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* YouTube channels */}
             <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:16 }}>
               <div style={{ fontSize:13, fontWeight:600, marginBottom:12 }}>YouTube Channels</div>
               {userChannels.length===0 ? (
