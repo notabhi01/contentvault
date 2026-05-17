@@ -432,6 +432,7 @@ export default function App() {
   const [adminTab, setAdminTab] = useState("accounts");
   const [showAll, setShowAll] = useState(false);
   const [browseExpanded, setBrowseExpanded] = useState(null);
+  const [browseTab, setBrowseTab] = useState("unused");
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [newProdName, setNewProdName] = useState("");
@@ -997,123 +998,170 @@ export default function App() {
       )}
 
       {/* ── BROWSE ── */}
-      {page==="browse" && canBrowse(user.role) && (
-        <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
-          <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
-            <div style={{ fontSize:14, fontWeight:600 }}>Browse Teammates</div>
-            <div style={{ fontSize:13, color:"#a1a1aa", marginTop:2 }}>Tap a name to see their sources</div>
-          </div>
+      {page==="browse" && canBrowse(user.role) && (() => {
+        const now = Date.now();
 
-          {/* ── UNUSED SOURCES SECTION (owner + manager only) ── */}
-          {canSeeAll(user.role) && (() => {
-            const now = Date.now();
-            const unusedSources = accounts.filter(a => {
-              // Find the most recent visit across all lastVisit_* keys
-              const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
-              if (keys.length === 0) return true; // never visited
-              const latest = Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0));
-              if (latest === 0) return true;
-              const daysSince = Math.floor((now - latest) / 86400000);
-              return daysSince >= 7;
-            });
+        // Compute unused sources once
+        const unusedSources = accounts.filter(a => {
+          const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+          if (keys.length === 0) return true;
+          const latest = Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0));
+          if (latest === 0) return true;
+          return Math.floor((now - latest) / 86400000) >= 7;
+        });
 
-            if (unusedSources.length === 0) return null;
+        const getLatest = x => {
+          const keys = Object.keys(x).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+          if (!keys.length) return 0;
+          return Math.max(...keys.map(k => x[k] ? new Date(x[k]).getTime() : 0));
+        };
 
-            return (
-              <div style={{ borderBottom:"1px solid #ebebeb" }}>
-                <div onClick={()=>setBrowseExpanded(browseExpanded==="__unused__" ? null : "__unused__")}
-                  style={{ display:"flex", alignItems:"center", gap:12, padding:`12px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff7ed" }}>
-                  <div style={{ width:46, height:46, borderRadius:"50%", background:"#fed7aa", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>⏱</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:700, fontSize:14, color:"#9a3412" }}>Unused Sources</div>
-                    <div style={{ fontSize:12, color:"#c2410c", marginTop:1 }}>{unusedSources.length} source{unusedSources.length!==1?"s":""} not touched in 7+ days</div>
-                  </div>
-                  <span style={{ color:"#fb923c", fontSize:12, transform:browseExpanded==="__unused__"?"rotate(90deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▶</span>
-                </div>
+        // Tabs: owner+manager see Unused/All/By Teammate; others just see By Teammate
+        const tabs = canSeeAll(user.role)
+          ? [
+              { id:"unused", label:`Unused (${unusedSources.length})` },
+              { id:"all",    label:"All Sources" },
+              { id:"byTeammate", label:"By Teammate" },
+            ]
+          : [{ id:"byTeammate", label:"By Teammate" }];
 
-                {browseExpanded==="__unused__" && (
-                  <div style={{ background:"#fff7ed", borderTop:"1px solid #fed7aa" }}>
-                    {unusedSources.sort((a,b) => {
-                      const getLatest = x => {
-                        const keys = Object.keys(x).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
-                        if (!keys.length) return 0;
-                        return Math.max(...keys.map(k => x[k] ? new Date(x[k]).getTime() : 0));
-                      };
-                      return getLatest(a) - getLatest(b); // oldest first
-                    }).map(a => {
-                      const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
-                      const latest = keys.length ? Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0)) : 0;
-                      const daysSince = latest ? Math.floor((now - latest) / 86400000) : null;
+        const activeBrowseTab = canSeeAll(user.role) ? browseTab : "byTeammate";
 
-                      return (
-                        <div key={a.id} style={{ display:"flex", alignItems:"center", gap:12, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?20:28, borderBottom:"1px solid #fed7aa" }}>
-                          <Avatar name={a.username} size={36} />
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
-                            <div style={{ fontSize:11, color:"#c2410c", marginTop:1 }}>
-                              {a.owner} · {daysSince !== null ? `${daysSince}d unused` : "never visited"}
-                            </div>
-                          </div>
-                          <button onClick={e=>{ e.stopPropagation(); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
-                            style={{ border:"1.5px solid #fdba74", borderRadius:8, padding:"4px 12px", fontSize:12, fontWeight:600, color:"#9a3412", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
-                          <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username} from ${a.owner}?`)) removeAccount(a.id); }}
-                            style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}>Remove</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+        return (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile ? 70 : 0, overflow:"hidden" }}>
+            {/* Header */}
+            <div style={{ background:"#fff", borderBottom:"1px solid #ebebeb", flexShrink:0 }}>
+              <div style={{ padding:`12px ${isMobile?14:20}px 0` }}>
+                <div style={{ fontSize:14, fontWeight:700 }}>Browse</div>
               </div>
-            );
-          })()}
+              {/* Tab switcher */}
+              <div style={{ display:"flex", padding:`8px ${isMobile?14:20}px 0`, gap:4 }}>
+                {tabs.map(t => (
+                  <button key={t.id} onClick={()=>{ setBrowseTab(t.id); setBrowseExpanded(null); }}
+                    style={{
+                      background: activeBrowseTab===t.id ? "#18181b" : "transparent",
+                      color: activeBrowseTab===t.id ? "#fff" : "#71717a",
+                      border: activeBrowseTab===t.id ? "none" : "1px solid #e5e5e5",
+                      borderRadius:"8px 8px 0 0", padding:"7px 14px", fontSize:13,
+                      fontWeight: activeBrowseTab===t.id ? 600 : 400,
+                      cursor:"pointer", transition:"all .15s",
+                    }}>{t.label}</button>
+                ))}
+              </div>
+            </div>
 
-          {/* ── TEAMMATES LIST ── */}
-          <div style={{ background:"#fff" }}>
-            {users.filter(u=>u.role==="teammate").length===0 ? (
-              <div style={{ padding:"60px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No teammates yet.</div>
-            ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
-              const uAccounts = accounts.filter(a=>a.owner===u.displayName);
-              const isOpen = browseExpanded===u.username;
-              return (
-                <div key={u.id} style={{ borderBottom: i<arr.length-1?"1px solid #f2f2f2":"none" }}>
-                  <div onClick={()=>setBrowseExpanded(isOpen?null:u.username)}
-                    style={{ display:"flex", alignItems:"center", gap:12, padding:`11px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff" }}>
-                    <Avatar name={u.displayName} size={46} />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:600, fontSize:14 }}>{u.displayName}</div>
-                      <div style={{ fontSize:12, color:"#a1a1aa", marginTop:1 }}>{uAccounts.length} source{uAccounts.length!==1?"s":""}</div>
-                    </div>
-                    <span style={{ color:"#d4d4d4", fontSize:12, transform:isOpen?"rotate(90deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▶</span>
+            {/* ── UNUSED TAB ── */}
+            {activeBrowseTab==="unused" && (
+              <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
+                {unusedSources.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                    <div style={{ fontSize:32, marginBottom:10 }}>✅</div>
+                    <div style={{ fontSize:14 }}>All sources are active.</div>
+                    <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>No one is sitting on an unused account.</div>
                   </div>
-                  {isOpen && (
-                    <div style={{ background:"#fafaf9", borderTop:"1px solid #f2f2f2" }}>
-                      {uAccounts.length===0 ? (
-                        <div style={{ padding:`12px ${isMobile?14:20}px`, fontSize:13, color:"#a1a1aa" }}>No sources yet.</div>
-                      ) : uAccounts.map(a=>(
-                        <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?46:56, borderBottom:"1px solid #f2f2f2" }}>
-                          <Avatar name={a.username} size={36} />
-                          <div style={{ flex:1, minWidth:0, cursor:"pointer" }} onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}>
-                            <div style={{ fontWeight:500, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
-                            {a.postedTo && <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>{a.postedTo}</div>}
-                          </div>
-                          <button onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
-                            style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"4px 12px", fontSize:12, fontWeight:600, color:"#18181b", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
-                          {canSeeAll(user.role) && (
-                            <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username} from ${u.displayName}?`)) removeAccount(a.id); }}
-                              style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}
-                              onMouseEnter={e=>e.currentTarget.style.background="#fef2f2"}
-                              onMouseLeave={e=>e.currentTarget.style.background="#fff"}>Remove</button>
-                          )}
+                ) : unusedSources.sort((a,b) => getLatest(a) - getLatest(b)).map(a => {
+                  const latest = getLatest(a);
+                  const daysSince = latest ? Math.floor((now - latest) / 86400000) : null;
+                  return (
+                    <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`11px ${isMobile?14:20}px`, borderBottom:"1px solid #f2f2f2" }}>
+                      <Avatar name={a.username} size={42} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                        <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2 }}>
+                          {a.owner}
+                          <span style={{ marginLeft:8, background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"1px 7px", fontWeight:600, fontSize:11 }}>
+                            {daysSince !== null ? `${daysSince}d unused` : "never visited"}
+                          </span>
                         </div>
-                      ))}
+                      </div>
+                      <button onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
+                        style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#18181b", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
+                      <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username} from ${a.owner}?`)) removeAccount(a.id); }}
+                        style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}>Remove</button>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── ALL SOURCES TAB ── */}
+            {activeBrowseTab==="all" && (
+              <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
+                {accounts.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa", fontSize:14 }}>No sources yet.</div>
+                ) : accounts.sort((a,b)=>(a.username||"").localeCompare(b.username||"")).map(a => {
+                  const latest = getLatest(a);
+                  const daysSince = latest ? Math.floor((now - latest) / 86400000) : null;
+                  const isUnused = daysSince === null || daysSince >= 7;
+                  return (
+                    <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`11px ${isMobile?14:20}px`, borderBottom:"1px solid #f2f2f2" }}>
+                      <Avatar name={a.username} size={42} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                        <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2, display:"flex", alignItems:"center", gap:6 }}>
+                          <span>{a.owner}</span>
+                          {isUnused && <span style={{ background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"1px 7px", fontWeight:600, fontSize:11 }}>{daysSince !== null ? `${daysSince}d unused` : "never visited"}</span>}
+                        </div>
+                      </div>
+                      <button onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
+                        style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#18181b", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
+                      <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username}?`)) removeAccount(a.id); }}
+                        style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}>Remove</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── BY TEAMMATE TAB ── */}
+            {activeBrowseTab==="byTeammate" && (
+              <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
+                {users.filter(u=>u.role==="teammate").length===0 ? (
+                  <div style={{ padding:"60px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No teammates yet.</div>
+                ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
+                  const uAccounts = accounts.filter(a=>a.owner===u.displayName);
+                  const isOpen = browseExpanded===u.username;
+                  return (
+                    <div key={u.id} style={{ borderBottom: i<arr.length-1?"1px solid #f2f2f2":"none" }}>
+                      <div onClick={()=>setBrowseExpanded(isOpen?null:u.username)}
+                        style={{ display:"flex", alignItems:"center", gap:12, padding:`11px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff" }}>
+                        <Avatar name={u.displayName} size={46} />
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:600, fontSize:14 }}>{u.displayName}</div>
+                          <div style={{ fontSize:12, color:"#a1a1aa", marginTop:1 }}>{uAccounts.length} source{uAccounts.length!==1?"s":""}</div>
+                        </div>
+                        <span style={{ color:"#d4d4d4", fontSize:12, transform:isOpen?"rotate(90deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▶</span>
+                      </div>
+                      {isOpen && (
+                        <div style={{ background:"#fafaf9", borderTop:"1px solid #f2f2f2" }}>
+                          {uAccounts.length===0 ? (
+                            <div style={{ padding:`12px ${isMobile?14:20}px`, fontSize:13, color:"#a1a1aa" }}>No sources yet.</div>
+                          ) : uAccounts.map(a=>(
+                            <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?46:56, borderBottom:"1px solid #f2f2f2" }}>
+                              <Avatar name={a.username} size={36} />
+                              <div style={{ flex:1, minWidth:0, cursor:"pointer" }} onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}>
+                                <div style={{ fontWeight:500, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                                {a.postedTo && <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>{a.postedTo}</div>}
+                              </div>
+                              <button onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
+                                style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"4px 12px", fontSize:12, fontWeight:600, color:"#18181b", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
+                              {canSeeAll(user.role) && (
+                                <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username} from ${u.displayName}?`)) removeAccount(a.id); }}
+                                  style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}>Remove</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       {/* ── CHAT ── */}
       {page==="chat" && canEdit(user.role) && (
