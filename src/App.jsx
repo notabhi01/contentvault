@@ -17,6 +17,22 @@ function canRemoveAll(r) { return r === "owner" || r === "manager"; }
 function canBrowse(r)    { return r === "owner" || r === "manager" || r === "linktree"; }
 function canEdit(r)      { return r !== "linktree"; }
 
+// ─── localStorage cache helpers ───────────────────────────────
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function saveCache(key, data) {
+  try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+}
+function loadCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
 function toObj(doc) {
   const rawId = doc.name.split("/").pop();
   let id;
@@ -34,6 +50,7 @@ async function fsGet(col) {
       const url = `${FS}/${col}?key=${FB.apiKey}&pageSize=500${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
       const r = await fetch(url);
       const d = await r.json();
+      if (d.error) return null; // signal error vs empty
       if (Array.isArray(d)) {
         all = [...all, ...d.filter(item=>item.document).map(item=>toObj(item.document))];
         pageToken = null;
@@ -43,7 +60,7 @@ async function fsGet(col) {
       }
     } while (pageToken);
     return all;
-  } catch { return []; }
+  } catch { return null; }
 }
 async function fsSet(col, id, data) {
   const fields = {};
@@ -130,7 +147,6 @@ const CAT_GRADIENTS = [
   "linear-gradient(135deg,#fd7043,#ff8a65)",
   "linear-gradient(135deg,#26c6da,#00acc1)",
 ];
-
 const CAT_EMOJIS = ["🎯","🦋","🌊","🔥","⚡","🎪","🌈","🦄","💎","🎭","🌸","🦊","🐉","🎨","🏆"];
 
 function catStyle(name) {
@@ -153,87 +169,6 @@ function Avatar({ name, size = 44 }) {
   );
 }
 
-function SourceRow({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile }) {
-  const lv = a[visitKey] || a.lastVisited;
-  const selected = a.postedTo || "";
-  const chObj = (userChannels||[]).find(c => c.name === selected);
-
-  function open(e) {
-    if (e) e.preventDefault();
-    onVisit(a.id);
-    window.open(`https://www.instagram.com/${a.username}`, "_blank", "noreferrer");
-  }
-
-  if (isMobile) {
-    return (
-      <div onClick={open} style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "11px 16px",
-        borderBottom: "1px solid #f2f2f2", background: "#fff", cursor: "pointer",
-        WebkitTapHighlightColor: "transparent", userSelect: "none",
-      }}>
-        <Avatar name={a.username} size={46} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, color: "#18181b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {a.username}
-          </div>
-          <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {selected ? selected : "instagram.com/" + a.username}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {lv && <span style={{ fontSize: 11, color: "#c7c7c7" }}>{timeAgo(lv)}</span>}
-          <div style={{ border: "1.5px solid #dbdbdb", borderRadius: 8, padding: "5px 14px", fontSize: 13, fontWeight: 600, color: "#18181b", background: "#fff", whiteSpace: "nowrap" }}>Open</div>
-          {canRemove && (
-            <button onClick={e => { e.stopPropagation(); if (window.confirm(`Remove @${a.username}?`)) onRemove(a.id); }}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#d4d4d4", fontSize: 20, padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>×</button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", padding: "9px 20px", borderBottom: "1px solid #f2f2f2", background: "#fff", transition: "background .1s" }}
-      onMouseEnter={e => e.currentTarget.style.background = "#fafaf9"}
-      onMouseLeave={e => e.currentTarget.style.background = "#fff"}
-    >
-      <Avatar name={a.username} size={36} />
-      <div style={{ flex: 1, minWidth: 0, marginLeft: 12 }}>
-        <a href={`https://www.instagram.com/${a.username}`} target="_blank" rel="noreferrer" onClick={() => onVisit(a.id)}
-          style={{ fontWeight: 500, fontSize: 13, color: "#18181b", textDecoration: "none" }}
-          onMouseEnter={e => e.target.style.textDecoration = "underline"}
-          onMouseLeave={e => e.target.style.textDecoration = "none"}
-        >instagram.com/{a.username}</a>
-      </div>
-      <div style={{ width: 200, display: "flex", alignItems: "center", gap: 6 }}>
-        {userChannels !== null ? (
-          <>
-            <select value={selected} onChange={e => onPostedTo(a.id, e.target.value)}
-              style={{ background: "transparent", border: "none", fontSize: 12, color: selected ? "#18181b" : "#a1a1aa", outline: "none", cursor: "pointer", fontFamily: "inherit", maxWidth: 150 }}>
-              <option value="">— none —</option>
-              {(userChannels||[]).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-            </select>
-            {chObj && (
-              <a href={chObj.url} target="_blank" rel="noreferrer"
-                style={{ fontSize: 11, color: "#6366f1", fontWeight: 600, textDecoration: "none", background: "#eef2ff", padding: "2px 6px", borderRadius: 4 }}>↗</a>
-            )}
-          </>
-        ) : (
-          <span style={{ fontSize: 12, color: selected ? "#71717a" : "#d4d4d4" }}>{selected || "—"}</span>
-        )}
-      </div>
-      <div style={{ width: 100, fontSize: 12, color: "#a1a1aa" }}>{a.addedAt || "—"}</div>
-      <div style={{ width: 90, fontSize: 12, color: lv ? "#71717a" : "#d4d4d4" }}>{lv ? timeAgo(lv) : "Never"}</div>
-      {canRemove && (
-        <button onClick={() => { if (window.confirm(`Remove instagram.com/${a.username}?`)) onRemove(a.id); }}
-          style={{ background: "none", border: "1px solid #e5e5e5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "3px 8px", color: "#a1a1aa", fontWeight: 500, transition: "all .15s", marginLeft: 8 }}
-          onMouseEnter={e => { e.currentTarget.style.background = "#fef2f2"; e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.borderColor = "#fecaca"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#a1a1aa"; e.currentTarget.style.borderColor = "#e5e5e5"; }}>Remove</button>
-      )}
-    </div>
-  );
-}
-
 function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChannels, onPostedTo, isMobile, categories, onToggleCat, catMenuSource, setCatMenuSource, onFlag, canFlag, showOwner }) {
   const lv = a[visitKey] || a.lastVisited;
   const selected = a.postedTo || "";
@@ -241,8 +176,7 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
   const assignedCats = a.categories ? a.categories.split(",").filter(Boolean) : [];
   const menuOpen = catMenuSource === a.id;
   const flag = a.flag || "";
-  const lv2 = a[visitKey] || a.lastVisited;
-  const daysSinceVisit = lv2 ? Math.floor((Date.now() - new Date(lv2).getTime()) / 86400000) : 999;
+  const daysSinceVisit = lv ? Math.floor((Date.now() - new Date(lv).getTime()) / 86400000) : 999;
   const autoUnused = daysSinceVisit >= 7 && !flag;
 
   function open(e) {
@@ -281,26 +215,15 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
           <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
             {lv && <span style={{ fontSize:11, color:"#c7c7c7" }}>{timeAgo(lv)}</span>}
             <div onClick={open} style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"5px 12px", fontSize:13, fontWeight:600, color:"#18181b", cursor:"pointer", whiteSpace:"nowrap" }}>Open</div>
-            <button
-              onClick={e=>{ e.stopPropagation(); setCatMenuSource(menuOpen ? null : a.id); }}
-              style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:20, padding:"4px 6px", lineHeight:1, borderRadius:6 }}
-            >⋯</button>
+            <button onClick={e=>{ e.stopPropagation(); setCatMenuSource(menuOpen ? null : a.id); }}
+              style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:20, padding:"4px 6px", lineHeight:1, borderRadius:6 }}>⋯</button>
           </div>
         </div>
 
         {menuOpen && (
           <>
-            <div
-              onClick={()=>setCatMenuSource(null)}
-              style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200 }}
-            />
-            <div style={{
-              position:"fixed", bottom:0, left:0, right:0,
-              background:"#fff", borderRadius:"20px 20px 0 0",
-              zIndex:201, paddingBottom:"env(safe-area-inset-bottom)",
-              boxShadow:"0 -4px 30px rgba(0,0,0,0.15)",
-              animation:"slideUp .22s ease-out",
-            }}>
+            <div onClick={()=>setCatMenuSource(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200 }} />
+            <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderRadius:"20px 20px 0 0", zIndex:201, paddingBottom:"env(safe-area-inset-bottom)", boxShadow:"0 -4px 30px rgba(0,0,0,0.15)", animation:"slideUp .22s ease-out" }}>
               <div style={{ width:40, height:4, background:"#e5e5e5", borderRadius:99, margin:"12px auto 4px" }} />
               <div style={{ padding:"8px 20px 14px", borderBottom:"1px solid #f2f2f2", display:"flex", alignItems:"center", gap:10 }}>
                 <Avatar name={a.username} size={36} />
@@ -308,22 +231,16 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                   <div style={{ fontWeight:700, fontSize:14 }}>@{a.username}</div>
                   <div style={{ fontSize:12, color:"#a1a1aa" }}>Manage source</div>
                 </div>
-                {flag && <span style={{ fontSize:11, fontWeight:600, color: flag==="low_quality"?"#d97706":"#6b7280", background: flag==="low_quality"?"#fef3c7":"#f3f4f6", borderRadius:20, padding:"2px 8px" }}>{flag==="low_quality"?"⚠️ Low quality":"💤 Not using"}</span>}
               </div>
-
               <div style={{ maxHeight:300, overflowY:"auto" }}>
                 {categories.length === 0 ? (
-                  <div style={{ padding:"24px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
-                    No categories yet.<br/>Create one in the Categories view.
-                  </div>
+                  <div style={{ padding:"24px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No categories yet.<br/>Create one in the Categories view.</div>
                 ) : categories.map(cat => {
                   const assigned = assignedCats.includes(cat.id);
                   const { emoji, grad } = catStyle(cat.name);
                   return (
-                    <div key={cat.id}
-                      onClick={()=>{ onToggleCat(a.id, cat.id); }}
-                      style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 20px", borderBottom:"1px solid #f8f8f8", background: assigned?"#fafaf9":"#fff", cursor:"pointer" }}
-                    >
+                    <div key={cat.id} onClick={()=>{ onToggleCat(a.id, cat.id); }}
+                      style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 20px", borderBottom:"1px solid #f8f8f8", background: assigned?"#fafaf9":"#fff", cursor:"pointer" }}>
                       <div style={{ width:40, height:40, borderRadius:12, background:grad, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{emoji}</div>
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:600, fontSize:14 }}>{cat.name}</div>
@@ -336,18 +253,15 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                   );
                 })}
               </div>
-
               {canFlag && (
                 <div style={{ padding:"12px 20px", borderTop:"1px solid #f2f2f2" }}>
                   <div style={{ fontSize:11, fontWeight:600, color:"#a1a1aa", textTransform:"uppercase", letterSpacing:.5, marginBottom:10 }}>Mark as</div>
                   <div style={{ display:"flex", gap:8 }}>
-                    <button
-                      onClick={()=>onFlag(a.id, flag==="low_quality" ? "" : "low_quality")}
+                    <button onClick={()=>onFlag(a.id, flag==="low_quality" ? "" : "low_quality")}
                       style={{ flex:1, background: flag==="low_quality"?"#fef3c7":"#f9fafb", border: flag==="low_quality"?"1.5px solid #f59e0b":"1.5px solid #e5e5e5", borderRadius:10, padding:"10px 8px", fontSize:13, fontWeight:600, color: flag==="low_quality"?"#d97706":"#71717a", cursor:"pointer" }}>
                       ⚠️ Low quality
                     </button>
-                    <button
-                      onClick={()=>onFlag(a.id, flag==="not_using" ? "" : "not_using")}
+                    <button onClick={()=>onFlag(a.id, flag==="not_using" ? "" : "not_using")}
                       style={{ flex:1, background: flag==="not_using"?"#f3f4f6":"#f9fafb", border: flag==="not_using"?"1.5px solid #9ca3af":"1.5px solid #e5e5e5", borderRadius:10, padding:"10px 8px", fontSize:13, fontWeight:600, color: flag==="not_using"?"#374151":"#71717a", cursor:"pointer" }}>
                       💤 Not using
                     </button>
@@ -355,7 +269,6 @@ function SourceRowWithCat({ a, visitKey, onVisit, onRemove, canRemove, userChann
                   {flag && <button onClick={()=>onFlag(a.id,"")} style={{ width:"100%", background:"none", border:"none", fontSize:12, color:"#a1a1aa", marginTop:6, cursor:"pointer", padding:"4px" }}>Clear flag</button>}
                 </div>
               )}
-
               <div style={{ padding:"12px 20px 8px", borderTop:"1px solid #f2f2f2" }}>
                 {canRemove && (
                   <button onClick={()=>{ if(window.confirm(`Remove @${a.username}?`)) { onRemove(a.id); setCatMenuSource(null); } }}
@@ -458,7 +371,7 @@ function localBot(text, user, accounts) {
   const isHelp   = /\b(help|hi|hey|hello|what can)\b/.test(lower);
   const username = extractUsername(text);
 
-  if (!canEdit(user.role)) return { action:"chat", reply:"You have view-only access. Use Browse Teammates to find sources." };
+  if (!canEdit(user.role)) return { action:"chat", reply:"You have view-only access." };
   if (isList) {
     if (canSeeAll(user.role) && /\b(all|everyone|team)\b/.test(lower)) {
       if (!accounts.length) return { action:"chat", reply:"No accounts claimed yet." };
@@ -506,7 +419,8 @@ export default function App() {
   const [accounts, setAccounts] = useState([]);
   const [users, setUsers] = useState([]);
   const [syncing, setSyncing] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true); // NEW: track first load
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [quotaError, setQuotaError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceView, setSourceView] = useState("list");
   const [categories, setCategories] = useState([]);
@@ -515,11 +429,6 @@ export default function App() {
   const [newCatName, setNewCatName] = useState("");
   const [savingCat, setSavingCat] = useState(false);
   const [catMenuSource, setCatMenuSource] = useState(null);
-  const [aiMessages, setAiMessages] = useState([{role:"assistant", text:"Hey Abhi! 👋 I'm your ContentVault assistant. Ask me anything about your data — who owns what, check if an account is taken, see all sources, find flagged accounts, whatever you need. I'll pull the latest info from Firebase and tell you instantly."}]);
-  const [aiInput, setAiInput] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const aiBottomRef = useRef(null);
-  const aiInputRef = useRef(null);
   const [adminTab, setAdminTab] = useState("accounts");
   const [showAll, setShowAll] = useState(false);
   const [browseExpanded, setBrowseExpanded] = useState(null);
@@ -538,6 +447,7 @@ export default function App() {
   const inputRef = useRef(null);
   const pollRef = useRef(null);
 
+  // Load user from localStorage on mount
   useEffect(() => {
     try {
       const s = localStorage.getItem("cv_user");
@@ -548,47 +458,52 @@ export default function App() {
           setMessages([{role:"assistant",text:`Welcome back, ${p.displayName}.`}]);
           const ch = localStorage.getItem(`cv_ch_${p.username}`);
           if (ch) setUserChannels(parseChannels(ch));
+          // Load from cache immediately — no Firebase needed
+          const cachedAccounts = loadCache(`cv_accounts`);
+          const cachedUsers = loadCache(`cv_users`);
+          if (cachedAccounts) { setAccounts(cachedAccounts); setInitialLoad(false); }
+          if (cachedUsers) setUsers(cachedUsers);
         }
       }
     } catch {}
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [messages, loading]);
-  useEffect(() => { aiBottomRef.current?.scrollIntoView({behavior:"smooth"}); }, [aiMessages, aiLoading]);
 
   useEffect(() => {
     if (!user) return;
     refresh(); loadChannels(); loadProducts(); loadCats();
-
-    pollRef.current = setInterval(refresh, 5 * 60 * 1000);
-
-    function onVisible() {
-      if (document.visibilityState === "visible") refresh();
-    }
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      clearInterval(pollRef.current);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
+    // Poll every 30 minutes only — NOT on visibilitychange
+    pollRef.current = setInterval(refresh, 30 * 60 * 1000);
+    return () => clearInterval(pollRef.current);
   }, [user]);
 
-  // FIXED refresh: never overwrites existing data with empty results
+  // OPTIMIZED refresh: cache-first, no visibilityChange listener
   async function refresh() {
     setSyncing(true);
-    try {
-      const [s, u] = await Promise.all([fsGet("sources"), fsGet("users")]);
-      // Only update state if we got real data back — never blank the screen on a failed/empty fetch
+    const [s, u] = await Promise.all([fsGet("sources"), fsGet("users")]);
+
+    if (s === null || u === null) {
+      // null means API error (quota, network, etc.)
+      setQuotaError(true);
+      // Keep showing cached data — don't blank the screen
+    } else {
+      setQuotaError(false);
       if (s.length > 0 || u.length > 0) {
         setAccounts(s);
         setUsers(u);
-      } else if (s.length === 0 && u.length === 0) {
-        // Both empty could be a network blip — only trust it on very first load
-        // (initialLoad true means we haven't shown data yet, safe to set empty)
-        setAccounts(prev => prev.length > 0 ? prev : s);
-        setUsers(prev => prev.length > 0 ? prev : u);
+        saveCache("cv_accounts", s);
+        saveCache("cv_users", u);
+      } else {
+        // Empty result — trust cache over empty
+        const cached = loadCache("cv_accounts");
+        if (cached && cached.length > 0) {
+          setAccounts(cached);
+        } else {
+          setAccounts(s);
+        }
       }
-    } catch {}
+    }
     setInitialLoad(false);
     setSyncing(false);
   }
@@ -596,6 +511,7 @@ export default function App() {
   async function loadChannels() {
     try {
       const docs = await fsGet("channels");
+      if (!docs) return;
       const mine = docs.find(d => d.id === user.username);
       if (mine?.data) {
         const ch = parseChannels(mine.data);
@@ -637,7 +553,7 @@ export default function App() {
     setLoadingProducts(true);
     try {
       const docs = await fsGet("products");
-      setProducts(docs.sort((a,b) => (b.addedAt||"").localeCompare(a.addedAt||"")));
+      if (docs) setProducts(docs.sort((a,b) => (b.addedAt||"").localeCompare(a.addedAt||"")));
     } catch {}
     setLoadingProducts(false);
   }
@@ -646,13 +562,7 @@ export default function App() {
     if (!newProdName.trim() || !newProdLink.trim()) return;
     setAddingProd(true);
     const id = Date.now().toString();
-    const entry = {
-      name: newProdName.trim(),
-      imgUrl: newProdImg.trim(),
-      link: newProdLink.trim(),
-      addedBy: user.displayName,
-      addedAt: new Date().toISOString(),
-    };
+    const entry = { name: newProdName.trim(), imgUrl: newProdImg.trim(), link: newProdLink.trim(), addedBy: user.displayName, addedAt: new Date().toISOString() };
     try {
       await fsSet("products", id, entry);
       await loadProducts();
@@ -670,7 +580,7 @@ export default function App() {
   async function loadCats() {
     try {
       const docs = await fsGet(`cats_${user.username}`);
-      setCategories(docs.sort((a,b) => (a.name||"").localeCompare(b.name||"")));
+      if (docs) setCategories(docs.sort((a,b) => (a.name||"").localeCompare(b.name||"")));
     } catch {}
   }
 
@@ -730,6 +640,9 @@ export default function App() {
   async function removeAccount(id) {
     await fsDelete("sources", id);
     setAccounts(prev => prev.filter(a => a.id !== id));
+    // Update cache
+    const updated = accounts.filter(a => a.id !== id);
+    saveCache("cv_accounts", updated);
   }
 
   function detectRole(p) {
@@ -749,7 +662,7 @@ export default function App() {
     setAuthLoading(true); setAuthError("");
     try {
       const ex = await fsGet("users");
-      if (ex.find(u => u.username===un || u.displayName?.toLowerCase()===dn.toLowerCase())) {
+      if (ex && ex.find(u => u.username===un || u.displayName?.toLowerCase()===dn.toLowerCase())) {
         setAuthError(`"${dn}" is already taken.`); setAuthLoading(false); return;
       }
       await fsSet("users", un, {username:un, displayName:dn, role, createdAt:new Date().toISOString().slice(0,10)});
@@ -770,6 +683,7 @@ export default function App() {
     setAuthLoading(true); setAuthError("");
     try {
       const ex = await fsGet("users");
+      if (!ex) { setAuthError("Can't connect to database. Try again."); setAuthLoading(false); return; }
       const found = ex.find(u => u.username===un);
       if (!found) { setAuthError("Account not found. Sign up first."); setAuthLoading(false); return; }
       if (found.role !== role) { setAuthError("Wrong password for this account."); setAuthLoading(false); return; }
@@ -786,7 +700,7 @@ export default function App() {
   function logout() {
     localStorage.removeItem("cv_user");
     setUser(null); setNameInput(""); setPassInput(""); setAuthError(""); setMessages([]);
-    setPage("sources"); setUserChannels([]); setInitialLoad(true);
+    setPage("sources"); setUserChannels([]); setInitialLoad(true); setAccounts([]); setUsers([]);
   }
 
   async function send() {
@@ -795,54 +709,21 @@ export default function App() {
     setInput("");
     const hist = [...messages, {role:"user",text}];
     setMessages(hist); setLoading(true);
-    const fresh = accounts;
-    const result = localBot(text, user, fresh, categories);
-    const {action, username, usernames, catName, catId, reply} = result;
+    const result = localBot(text, user, accounts);
+    const {action, username, reply} = result;
 
-    if (!canEdit(user.role)) {
-    } else if (action==="add" && username) {
-      const entry = {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:"", categories:""};
-      await fsSet("sources", username, entry);
-      setAccounts(prev => [...prev.filter(a=>a.id!==username), {id:username, ...entry}]);
-
-    } else if (action==="bulk_add" && usernames && usernames.length > 0) {
-      const entries = usernames.map(u => ({username:u, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${u}`, postedTo:"", categories:""}));
-      await Promise.all(entries.map(e => fsSet("sources", e.username, e)));
-      setAccounts(prev => {
-        const filtered = prev.filter(a => !usernames.includes(a.id));
-        return [...filtered, ...entries.map(e => ({id:e.username, ...e}))];
-      });
-
-    } else if (action==="remove" && username) {
-      await fsDelete("sources", username);
-      setAccounts(prev => prev.filter(a => a.id!==username));
-
-    } else if (action==="create_cat" && catName) {
-      const id = Date.now().toString();
-      await fsSet(`cats_${user.username}`, id, { name: catName, createdAt: new Date().toISOString() });
-      setCategories(prev => [...prev, {id, name:catName, createdAt:new Date().toISOString()}].sort((a,b)=>a.name.localeCompare(b.name)));
-
-    } else if (action==="add_to_cat" && username && catId) {
-      const source = fresh.find(a => a.username===username && a.owner===user.displayName);
-      if (source) {
-        const current = source.categories ? source.categories.split(",").filter(Boolean) : [];
-        if (!current.includes(catId)) {
-          const updated = [...current, catId].join(",");
-          await fsPatch("sources", source.id, { categories: updated });
-          setAccounts(prev => prev.map(a => a.id===source.id ? {...a, categories:updated} : a));
-        }
-      }
-
-    } else if (action==="create_cat_and_add" && catName && username) {
-      const id = Date.now().toString();
-      await fsSet(`cats_${user.username}`, id, { name: catName, createdAt: new Date().toISOString() });
-      setCategories(prev => [...prev, {id, name:catName, createdAt:new Date().toISOString()}].sort((a,b)=>a.name.localeCompare(b.name)));
-      const source = fresh.find(a => a.username===username && a.owner===user.displayName);
-      if (source) {
-        const current = source.categories ? source.categories.split(",").filter(Boolean) : [];
-        const updated = [...current, id].join(",");
-        await fsPatch("sources", source.id, { categories: updated });
-        setAccounts(prev => prev.map(a => a.id===source.id ? {...a, categories:updated} : a));
+    if (canEdit(user.role)) {
+      if (action==="add" && username) {
+        const entry = {username, owner:user.displayName, ownerUsername:user.username, role:user.role, addedAt:new Date().toISOString().slice(0,10), igLink:`https://www.instagram.com/${username}`, postedTo:"", categories:""};
+        await fsSet("sources", username, entry);
+        const updated = [...accounts.filter(a=>a.id!==username), {id:username, ...entry}];
+        setAccounts(updated);
+        saveCache("cv_accounts", updated);
+      } else if (action==="remove" && username) {
+        await fsDelete("sources", username);
+        const updated = accounts.filter(a => a.id!==username);
+        setAccounts(updated);
+        saveCache("cv_accounts", updated);
       }
     }
 
@@ -857,7 +738,6 @@ export default function App() {
   const myAccounts = accounts.filter(a=>a.owner===user?.displayName);
   const visitKey = user ? `lastVisit_${user.username}` : "";
   const color = user ? ROLE_COLORS[user.role] : "#18181b";
-
   const sourceBase = (user && canSeeAll(user.role) && showAll) ? accounts : myAccounts;
   const sourceList = sourceBase
     .filter(a => !searchQuery || a.username.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -914,17 +794,24 @@ export default function App() {
   );
 
   const navItems = [
-    {id:"sources",  label:"Sources",  show:true},
-    {id:"browse",   label:"Browse",   show:canBrowse(user.role)},
-    {id:"winning",  label:"Winning",  show:true},
-    {id:"chat",     label:"Chat",     show:canEdit(user.role)},
-    {id:"admin",    label:"Admin",    show:canSeeAll(user.role)},
-    {id:"profile",  label:"Profile",  show:true},
+    {id:"sources", label:"Sources", show:true},
+    {id:"browse",  label:"Browse",  show:canBrowse(user.role)},
+    {id:"winning", label:"Winning", show:true},
+    {id:"chat",    label:"Chat",    show:canEdit(user.role)},
+    {id:"admin",   label:"Admin",   show:canSeeAll(user.role)},
+    {id:"profile", label:"Profile", show:true},
   ].filter(n=>n.show);
 
   return (
     <div style={{ minHeight:"100vh", background:"#fafaf9", fontFamily:"'DM Sans',system-ui,sans-serif", color:"#18181b", display:"flex", flexDirection:"column" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+      {/* quota error banner */}
+      {quotaError && (
+        <div style={{ background:"#fef3c7", borderBottom:"1px solid #f59e0b", padding:"8px 16px", fontSize:13, color:"#92400e", textAlign:"center", fontWeight:500 }}>
+          ⚠️ Firebase quota exceeded — showing cached data. Will retry automatically.
+        </div>
+      )}
 
       <div style={{ background:"#fff", borderBottom:"1px solid #ebebeb", padding:`0 ${isMobile?14:20}px`, height:52, display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:20 }}>
         <div style={{ display:"flex", alignItems:"center", gap:isMobile?10:14 }}>
@@ -948,9 +835,7 @@ export default function App() {
         <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #ebebeb", display:"flex", zIndex:20, paddingBottom:"env(safe-area-inset-bottom)" }}>
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{ flex:1, background:"none", border:"none", padding:"10px 0 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-              <span style={{ fontSize:18 }}>
-                {n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":n.id==="aiadmin"?"🤖":"👤"}
-              </span>
+              <span style={{ fontSize:18 }}>{n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":"👤"}</span>
               <span style={{ fontSize:10, color:page===n.id?"#18181b":"#a1a1aa", fontWeight:page===n.id?600:400 }}>{n.label}</span>
             </button>
           ))}
@@ -960,48 +845,52 @@ export default function App() {
       {/* ── SOURCES ── */}
       {page==="sources" && (
         <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile ? 70 : 0 }}>
-          <div style={{ padding:`10px ${isMobile?12:20}px`, display:"flex", alignItems:"center", gap:8, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
-            <div style={{ flex:1, display:"flex", alignItems:"center", gap:8 }}>
-              {activeCat ? (
-                <button onClick={()=>setActiveCat(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, color:"#18181b", padding:0, display:"flex", alignItems:"center", gap:6 }}>
-                  ← {categories.find(c=>c.id===activeCat)?.name||"Category"}
+          <div style={{ borderBottom:"1px solid #ebebeb", background:"#fff" }}>
+            {/* Row 1: toggles */}
+            <div style={{ padding:`10px ${isMobile?12:20}px`, display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ flex:1, display:"flex", alignItems:"center", gap:8 }}>
+                {activeCat ? (
+                  <button onClick={()=>setActiveCat(null)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, color:"#18181b", padding:0 }}>
+                    ← {categories.find(c=>c.id===activeCat)?.name||"Category"}
+                  </button>
+                ) : (
+                  <>
+                    {canSeeAll(user.role) ? (
+                      <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
+                        <button onClick={()=>setShowAll(false)} style={{ background:!showAll?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:!showAll?600:400, color:!showAll?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:!showAll?"0 1px 3px rgba(0,0,0,0.08)":"none", whiteSpace:"nowrap" }}>My Sources</button>
+                        <button onClick={()=>setShowAll(true)} style={{ background:showAll?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:showAll?600:400, color:showAll?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:showAll?"0 1px 3px rgba(0,0,0,0.08)":"none", whiteSpace:"nowrap" }}>Everyone</button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize:14, fontWeight:600 }}>My Sources</span>
+                    )}
+                    <span style={{ fontSize:12, color:"#a1a1aa", background:"#f4f4f5", borderRadius:4, padding:"1px 7px" }}>{sourceList.length}</span>
+                  </>
+                )}
+              </div>
+              {!activeCat && (
+                <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
+                  <button onClick={()=>setSourceView("list")} style={{ background:sourceView==="list"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="list"?600:400, color:sourceView==="list"?"#18181b":"#a1a1aa", cursor:"pointer", boxShadow:sourceView==="list"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>List</button>
+                  <button onClick={()=>setSourceView("categories")} style={{ background:sourceView==="categories"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="categories"?600:400, color:sourceView==="categories"?"#18181b":"#a1a1aa", cursor:"pointer", boxShadow:sourceView==="categories"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>Categories</button>
+                </div>
+              )}
+              {sourceView==="categories" && !activeCat && (
+                <button onClick={()=>setShowNewCat(!showNewCat)} style={{ background:showNewCat?"#f4f4f5":"#18181b", color:showNewCat?"#71717a":"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                  {showNewCat?"Cancel":"+ New"}
                 </button>
-              ) : (
-                <>
-                  {canSeeAll(user.role) ? (
-                    <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
-                      <button onClick={()=>setShowAll(false)} style={{ background:!showAll?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:!showAll?600:400, color:!showAll?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:!showAll?"0 1px 3px rgba(0,0,0,0.08)":"none", whiteSpace:"nowrap" }}>My Sources</button>
-                      <button onClick={()=>setShowAll(true)} style={{ background:showAll?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:showAll?600:400, color:showAll?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:showAll?"0 1px 3px rgba(0,0,0,0.08)":"none", whiteSpace:"nowrap" }}>Everyone</button>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize:14, fontWeight:600 }}>My Sources</span>
-                  )}
-                  <span style={{ fontSize:12, color:"#a1a1aa", background:"#f4f4f5", borderRadius:4, padding:"1px 7px" }}>{sourceList.length}</span>
-                </>
               )}
             </div>
-            {!activeCat && (
-              <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
-                <button onClick={()=>setSourceView("list")} style={{ background:sourceView==="list"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="list"?600:400, color:sourceView==="list"?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:sourceView==="list"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>List</button>
-                <button onClick={()=>setSourceView("categories")} style={{ background:sourceView==="categories"?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 10px", fontSize:12, fontWeight:sourceView==="categories"?600:400, color:sourceView==="categories"?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:sourceView==="categories"?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>Categories</button>
-              </div>
-            )}
+            {/* Row 2: search bar — own row on mobile so it's always fully visible */}
             {sourceView==="list" && !activeCat && (
-              <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search…"
-                style={{ width: isMobile?100:160, background:"#f4f4f5", border:"none", borderRadius:8, padding:"6px 10px", color:"#18181b", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-            )}
-            {sourceView==="categories" && !activeCat && (
-              <button onClick={()=>setShowNewCat(!showNewCat)} style={{ background:showNewCat?"#f4f4f5":"#18181b", color:showNewCat?"#71717a":"#fff", border:"none", borderRadius:8, padding:"6px 12px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                {showNewCat?"Cancel":"+ New"}
-              </button>
+              <div style={{ padding:`0 ${isMobile?12:20}px 10px` }}>
+                <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Search sources…"
+                  style={{ width:"100%", background:"#f4f4f5", border:"none", borderRadius:8, padding:"8px 12px", color:"#18181b", fontSize:13, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }} />
+              </div>
             )}
           </div>
 
           {showNewCat && sourceView==="categories" && (
             <div style={{ padding:`10px ${isMobile?12:20}px`, borderBottom:"1px solid #ebebeb", background:"#fafaf9", display:"flex", gap:8 }}>
-              <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="Category name (e.g. Frog Costume)"
-                onKeyDown={e=>{ if(e.key==="Enter") createCategory(); }}
-                autoFocus
+              <input value={newCatName} onChange={e=>setNewCatName(e.target.value)} placeholder="Category name" onKeyDown={e=>{ if(e.key==="Enter") createCategory(); }} autoFocus
                 style={{ flex:1, background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
               <button onClick={createCategory} disabled={savingCat||!newCatName.trim()}
                 style={{ background:savingCat||!newCatName.trim()?"#e5e5e5":"#18181b", color:savingCat||!newCatName.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontWeight:600, fontSize:13, cursor:"pointer" }}>
@@ -1015,8 +904,7 @@ export default function App() {
               {categories.length===0 ? (
                 <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
                   <div style={{ fontSize:32, marginBottom:10 }}>📂</div>
-                  <div style={{ fontSize:14, marginBottom:6 }}>No categories yet.</div>
-                  <div style={{ fontSize:13, color:"#c7c7c7" }}>Tap "+ New" to create your first one.</div>
+                  <div style={{ fontSize:14 }}>No categories yet.</div>
                 </div>
               ) : (
                 <div style={{ columns: isMobile?2:3, columnGap: isMobile?10:14 }}>
@@ -1025,11 +913,9 @@ export default function App() {
                     const count = myAccounts.filter(a => a.categories && a.categories.split(",").includes(cat.id)).length;
                     return (
                       <div key={cat.id} style={{ breakInside:"avoid", marginBottom: isMobile?10:14, display:"inline-block", width:"100%" }}>
-                        <div onClick={()=>setActiveCat(cat.id)}
-                          style={{ borderRadius:16, overflow:"hidden", cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,0.08)", transition:"transform .15s, box-shadow .15s" }}
-                          onMouseEnter={e=>{ e.currentTarget.style.transform="translateY(-3px)"; e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,0.13)"; }}
-                          onMouseLeave={e=>{ e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.08)"; }}
-                        >
+                        <div onClick={()=>setActiveCat(cat.id)} style={{ borderRadius:16, overflow:"hidden", cursor:"pointer", boxShadow:"0 2px 8px rgba(0,0,0,0.08)", transition:"transform .15s" }}
+                          onMouseEnter={e=>e.currentTarget.style.transform="translateY(-3px)"}
+                          onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
                           <div style={{ background:grad, height: isMobile?100:120, display:"flex", alignItems:"center", justifyContent:"center" }}>
                             <span style={{ fontSize: isMobile?40:48 }}>{emoji}</span>
                           </div>
@@ -1055,30 +941,20 @@ export default function App() {
                 const catSources = myAccounts.filter(a => a.categories && a.categories.split(",").includes(activeCat));
                 return catSources.length===0 ? (
                   <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
-                    <div style={{ fontSize:32, marginBottom:10 }}>—</div>
                     <div style={{ fontSize:14 }}>No sources in this category yet.</div>
-                    <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>Switch to List view and tap ⋯ on a source to assign it.</div>
                   </div>
                 ) : catSources.map(a=>(
-                  <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
-                    onRemove={removeAccount}
+                  <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit} onRemove={removeAccount}
                     canRemove={a.owner===user.displayName||canRemoveAll(user.role)}
                     userChannels={a.owner===user.displayName ? userChannels : null}
-                    onPostedTo={updatePostedTo}
-                    isMobile={isMobile}
-                    categories={categories}
-                    onToggleCat={toggleSourceCategory}
-                    catMenuSource={catMenuSource}
-                    setCatMenuSource={setCatMenuSource}
-                    onFlag={handleFlag}
-                    canFlag={user.role==="owner"}
-                  />
+                    onPostedTo={updatePostedTo} isMobile={isMobile} categories={categories}
+                    onToggleCat={toggleSourceCategory} catMenuSource={catMenuSource} setCatMenuSource={setCatMenuSource}
+                    onFlag={handleFlag} canFlag={user.role==="owner"} />
                 ));
               })()}
             </div>
           )}
 
-          {/* ── LIST VIEW ── */}
           {sourceView==="list" && (
             <>
               {!isMobile && (
@@ -1093,7 +969,6 @@ export default function App() {
                 </div>
               )}
               <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
-                {/* FIXED: Show loading state on first load, never blank screen mid-sync */}
                 {initialLoad ? (
                   <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
                     <div style={{ fontSize:28, marginBottom:12 }}>⏳</div>
@@ -1108,20 +983,12 @@ export default function App() {
                     )}
                   </div>
                 ) : sourceList.map(a=>(
-                  <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit}
-                    onRemove={removeAccount}
+                  <SourceRowWithCat key={a.id} a={a} visitKey={visitKey} onVisit={handleVisit} onRemove={removeAccount}
                     canRemove={a.owner===user.displayName||canRemoveAll(user.role)}
                     userChannels={a.owner===user.displayName ? userChannels : null}
-                    onPostedTo={updatePostedTo}
-                    isMobile={isMobile}
-                    categories={categories}
-                    onToggleCat={toggleSourceCategory}
-                    catMenuSource={catMenuSource}
-                    setCatMenuSource={setCatMenuSource}
-                    onFlag={handleFlag}
-                    canFlag={user.role==="owner"}
-                    showOwner={showAll}
-                  />
+                    onPostedTo={updatePostedTo} isMobile={isMobile} categories={categories}
+                    onToggleCat={toggleSourceCategory} catMenuSource={catMenuSource} setCatMenuSource={setCatMenuSource}
+                    onFlag={handleFlag} canFlag={user.role==="owner"} showOwner={showAll} />
                 ))}
               </div>
             </>
@@ -1129,25 +996,90 @@ export default function App() {
         </div>
       )}
 
-      {/* ── BROWSE TEAMMATES ── */}
+      {/* ── BROWSE ── */}
       {page==="browse" && canBrowse(user.role) && (
         <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
           <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
             <div style={{ fontSize:14, fontWeight:600 }}>Browse Teammates</div>
             <div style={{ fontSize:13, color:"#a1a1aa", marginTop:2 }}>Tap a name to see their sources</div>
           </div>
+
+          {/* ── UNUSED SOURCES SECTION (owner + manager only) ── */}
+          {canSeeAll(user.role) && (() => {
+            const now = Date.now();
+            const unusedSources = accounts.filter(a => {
+              // Find the most recent visit across all lastVisit_* keys
+              const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+              if (keys.length === 0) return true; // never visited
+              const latest = Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0));
+              if (latest === 0) return true;
+              const daysSince = Math.floor((now - latest) / 86400000);
+              return daysSince >= 7;
+            });
+
+            if (unusedSources.length === 0) return null;
+
+            return (
+              <div style={{ borderBottom:"1px solid #ebebeb" }}>
+                <div onClick={()=>setBrowseExpanded(browseExpanded==="__unused__" ? null : "__unused__")}
+                  style={{ display:"flex", alignItems:"center", gap:12, padding:`12px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff7ed" }}>
+                  <div style={{ width:46, height:46, borderRadius:"50%", background:"#fed7aa", display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0 }}>⏱</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700, fontSize:14, color:"#9a3412" }}>Unused Sources</div>
+                    <div style={{ fontSize:12, color:"#c2410c", marginTop:1 }}>{unusedSources.length} source{unusedSources.length!==1?"s":""} not touched in 7+ days</div>
+                  </div>
+                  <span style={{ color:"#fb923c", fontSize:12, transform:browseExpanded==="__unused__"?"rotate(90deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▶</span>
+                </div>
+
+                {browseExpanded==="__unused__" && (
+                  <div style={{ background:"#fff7ed", borderTop:"1px solid #fed7aa" }}>
+                    {unusedSources.sort((a,b) => {
+                      const getLatest = x => {
+                        const keys = Object.keys(x).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+                        if (!keys.length) return 0;
+                        return Math.max(...keys.map(k => x[k] ? new Date(x[k]).getTime() : 0));
+                      };
+                      return getLatest(a) - getLatest(b); // oldest first
+                    }).map(a => {
+                      const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+                      const latest = keys.length ? Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0)) : 0;
+                      const daysSince = latest ? Math.floor((now - latest) / 86400000) : null;
+
+                      return (
+                        <div key={a.id} style={{ display:"flex", alignItems:"center", gap:12, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?20:28, borderBottom:"1px solid #fed7aa" }}>
+                          <Avatar name={a.username} size={36} />
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                            <div style={{ fontSize:11, color:"#c2410c", marginTop:1 }}>
+                              {a.owner} · {daysSince !== null ? `${daysSince}d unused` : "never visited"}
+                            </div>
+                          </div>
+                          <button onClick={e=>{ e.stopPropagation(); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
+                            style={{ border:"1.5px solid #fdba74", borderRadius:8, padding:"4px 12px", fontSize:12, fontWeight:600, color:"#9a3412", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
+                          <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username} from ${a.owner}?`)) removeAccount(a.id); }}
+                            style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}>Remove</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── TEAMMATES LIST ── */}
           <div style={{ background:"#fff" }}>
             {users.filter(u=>u.role==="teammate").length===0 ? (
               <div style={{ padding:"60px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No teammates yet.</div>
             ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
               const uAccounts = accounts.filter(a=>a.owner===u.displayName);
-              const isOpen = browseExpanded===u.id;
+              const isOpen = browseExpanded===u.username;
               return (
                 <div key={u.id} style={{ borderBottom: i<arr.length-1?"1px solid #f2f2f2":"none" }}>
-                  <div onClick={()=>setBrowseExpanded(isOpen?null:u.id)}
-                    style={{ display:"flex", alignItems:"center", gap:12, padding:`11px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff", WebkitTapHighlightColor:"transparent" }}>
+                  <div onClick={()=>setBrowseExpanded(isOpen?null:u.username)}
+                    style={{ display:"flex", alignItems:"center", gap:12, padding:`11px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff" }}>
                     <Avatar name={u.displayName} size={46} />
-                    <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ flex:1 }}>
                       <div style={{ fontWeight:600, fontSize:14 }}>{u.displayName}</div>
                       <div style={{ fontSize:12, color:"#a1a1aa", marginTop:1 }}>{uAccounts.length} source{uAccounts.length!==1?"s":""}</div>
                     </div>
@@ -1158,14 +1090,20 @@ export default function App() {
                       {uAccounts.length===0 ? (
                         <div style={{ padding:`12px ${isMobile?14:20}px`, fontSize:13, color:"#a1a1aa" }}>No sources yet.</div>
                       ) : uAccounts.map(a=>(
-                        <div key={a.id} onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
-                          style={{ display:"flex", alignItems:"center", gap:12, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?46:56, borderBottom:"1px solid #f2f2f2", cursor:"pointer", WebkitTapHighlightColor:"transparent" }}>
+                        <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?46:56, borderBottom:"1px solid #f2f2f2" }}>
                           <Avatar name={a.username} size={36} />
-                          <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ flex:1, minWidth:0, cursor:"pointer" }} onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}>
                             <div style={{ fontWeight:500, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
                             {a.postedTo && <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>{a.postedTo}</div>}
                           </div>
-                          <div style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"4px 12px", fontSize:12, fontWeight:600, color:"#18181b", flexShrink:0 }}>Open</div>
+                          <button onClick={()=>{ handleVisit(a.id); window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer"); }}
+                            style={{ border:"1.5px solid #dbdbdb", borderRadius:8, padding:"4px 12px", fontSize:12, fontWeight:600, color:"#18181b", background:"#fff", flexShrink:0, cursor:"pointer" }}>Open</button>
+                          {canSeeAll(user.role) && (
+                            <button onClick={e=>{ e.stopPropagation(); if(window.confirm(`Remove @${a.username} from ${u.displayName}?`)) removeAccount(a.id); }}
+                              style={{ border:"1.5px solid #fca5a5", borderRadius:8, padding:"4px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", flexShrink:0, cursor:"pointer" }}
+                              onMouseEnter={e=>e.currentTarget.style.background="#fef2f2"}
+                              onMouseLeave={e=>e.currentTarget.style.background="#fff"}>Remove</button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1210,7 +1148,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── WINNING PRODUCTS ── */}
+      {/* ── WINNING ── */}
       {page==="winning" && (
         <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
           <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -1219,25 +1157,18 @@ export default function App() {
               <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2 }}>Products doing well — source videos featuring these</div>
             </div>
             {canSeeAll(user.role) && (
-              <button onClick={()=>setShowAddProd(!showAddProd)}
-                style={{ background: showAddProd?"#f4f4f5":"#18181b", color: showAddProd?"#71717a":"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .15s" }}>
+              <button onClick={()=>setShowAddProd(!showAddProd)} style={{ background: showAddProd?"#f4f4f5":"#18181b", color: showAddProd?"#71717a":"#fff", border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, fontWeight:600, cursor:"pointer" }}>
                 {showAddProd ? "Cancel" : "+ Add"}
               </button>
             )}
           </div>
-
           {showAddProd && canSeeAll(user.role) && (
             <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fafaf9" }}>
               <div style={{ display:"flex", flexDirection:"column", gap:10, maxWidth:480 }}>
-                <input value={newProdName} onChange={e=>setNewProdName(e.target.value)} placeholder="Product name"
-                  style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-                <input value={newProdImg} onChange={e=>setNewProdImg(e.target.value)} placeholder="Image URL (paste a direct image link)"
-                  style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-                <input value={newProdLink} onChange={e=>setNewProdLink(e.target.value)} placeholder="Video link (YouTube, TikTok, etc.)"
-                  style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-                {newProdImg && (
-                  <img src={newProdImg} alt="preview" style={{ width:"100%", maxWidth:200, height:140, objectFit:"cover", borderRadius:10, border:"1px solid #e5e5e5" }} onError={e=>e.target.style.display="none"} />
-                )}
+                <input value={newProdName} onChange={e=>setNewProdName(e.target.value)} placeholder="Product name" style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                <input value={newProdImg} onChange={e=>setNewProdImg(e.target.value)} placeholder="Image URL" style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                <input value={newProdLink} onChange={e=>setNewProdLink(e.target.value)} placeholder="Video link" style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                {newProdImg && <img src={newProdImg} alt="preview" style={{ width:"100%", maxWidth:200, height:140, objectFit:"cover", borderRadius:10, border:"1px solid #e5e5e5" }} onError={e=>e.target.style.display="none"} />}
                 <button onClick={addProduct} disabled={addingProd||!newProdName.trim()||!newProdLink.trim()}
                   style={{ background:addingProd||!newProdName.trim()||!newProdLink.trim()?"#e5e5e5":"#18181b", color:addingProd||!newProdName.trim()||!newProdLink.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:8, padding:"10px", fontWeight:600, fontSize:13, cursor:"pointer" }}>
                   {addingProd?"Adding…":"Add Product"}
@@ -1245,7 +1176,6 @@ export default function App() {
               </div>
             </div>
           )}
-
           <div style={{ padding:`16px ${isMobile?12:20}px` }}>
             {loadingProducts ? (
               <div style={{ textAlign:"center", padding:"60px 20px", color:"#a1a1aa", fontSize:13 }}>Loading…</div>
@@ -1253,7 +1183,6 @@ export default function App() {
               <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
                 <div style={{ fontSize:32, marginBottom:10 }}>—</div>
                 <div style={{ fontSize:14 }}>No winning products yet.</div>
-                {canSeeAll(user.role) && <div style={{ fontSize:13, color:"#c7c7c7", marginTop:6 }}>Tap "+ Add" to add the first one.</div>}
               </div>
             ) : (
               <div style={{ columns: isMobile ? 2 : 3, columnGap: isMobile ? 10 : 14 }}>
@@ -1261,21 +1190,18 @@ export default function App() {
                   const daysAgo = Math.floor((Date.now() - new Date(p.addedAt).getTime()) / 86400000);
                   const timeLabel = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo}d ago`;
                   return (
-                    <div key={p.id} style={{ breakInside:"avoid", marginBottom: isMobile?10:14, borderRadius:14, overflow:"hidden", background:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)", cursor:"pointer", transition:"transform .15s, box-shadow .15s", display:"inline-block", width:"100%" }}
+                    <div key={p.id} style={{ breakInside:"avoid", marginBottom: isMobile?10:14, borderRadius:14, overflow:"hidden", background:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,0.07)", cursor:"pointer", transition:"transform .15s", display:"inline-block", width:"100%" }}
                       onClick={() => window.open(p.link, "_blank", "noreferrer")}
-                      onMouseEnter={e => { e.currentTarget.style.transform="translateY(-2px)"; e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.1), 0 8px 24px rgba(0,0,0,0.06)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.transform="translateY(0)"; e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04)"; }}
-                    >
+                      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
+                      onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
                       {p.imgUrl ? (
-                        <div style={{ width:"100%", background:"#f4f4f5", position:"relative" }}>
-                          <img src={p.imgUrl} alt={p.name} style={{ width:"100%", display:"block", borderRadius:"14px 14px 0 0" }} onError={e => { e.target.parentElement.style.display="none"; }} />
-                        </div>
+                        <img src={p.imgUrl} alt={p.name} style={{ width:"100%", display:"block", borderRadius:"14px 14px 0 0" }} onError={e=>e.target.parentElement.style.display="none"} />
                       ) : (
                         <div style={{ width:"100%", height:120, background:"linear-gradient(135deg,#f4f4f5,#e5e5e5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:32 }}>🎬</div>
                       )}
                       <div style={{ padding:"10px 12px 12px" }}>
                         <div style={{ fontWeight:600, fontSize: isMobile?13:14, color:"#18181b", lineHeight:1.3, marginBottom:6 }}>{p.name}</div>
-                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:4 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", gap:4 }}>
                           <span style={{ fontSize:11, color:"#a1a1aa" }}>{timeLabel}</span>
                           <span style={{ fontSize:11, color:"#a1a1aa" }}>by {p.addedBy}</span>
                         </div>
@@ -1307,7 +1233,6 @@ export default function App() {
                 <button key={t.id} onClick={()=>setAdminTab(t.id)} style={{ background:adminTab===t.id?"#fff":"transparent", border:"none", borderRadius:5, padding:"5px 14px", color:adminTab===t.id?"#18181b":"#71717a", fontWeight:adminTab===t.id?600:400, fontSize:13, cursor:"pointer", boxShadow:adminTab===t.id?"0 1px 3px rgba(0,0,0,0.07)":"none" }}>{t.l}</button>
               ))}
             </div>
-
             {adminTab==="accounts" && (
               <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, overflow:"hidden" }}>
                 {accounts.length===0 ? <div style={{ padding:"40px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No accounts yet.</div>
@@ -1330,7 +1255,6 @@ export default function App() {
                 ))}
               </div>
             )}
-
             {adminTab==="members" && (
               <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, overflow:"hidden" }}>
                 {users.length===0 ? <div style={{ padding:"40px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No members yet.</div>
@@ -1362,7 +1286,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
           <div style={{ padding:`16px ${isMobile?14:20}px`, display:"flex", flexDirection:"column", gap:16 }}>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {[{label:"My sources",value:myAccounts.length},{label:"Team total",value:accounts.length}].map(s=>(
@@ -1372,7 +1295,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-
             <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:16 }}>
               <div style={{ fontSize:13, fontWeight:600, marginBottom:12 }}>YouTube Channels</div>
               {userChannels.length===0 ? (
@@ -1389,17 +1311,14 @@ export default function App() {
                 </div>
               ))}
               <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:12 }}>
-                <input value={newChName} onChange={e=>setNewChName(e.target.value)} placeholder="Channel name"
-                  style={{ background:"#f4f4f5", border:"none", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-                <input value={newChUrl} onChange={e=>setNewChUrl(e.target.value)} placeholder="YouTube link"
-                  style={{ background:"#f4f4f5", border:"none", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                <input value={newChName} onChange={e=>setNewChName(e.target.value)} placeholder="Channel name" style={{ background:"#f4f4f5", border:"none", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                <input value={newChUrl} onChange={e=>setNewChUrl(e.target.value)} placeholder="YouTube link" style={{ background:"#f4f4f5", border:"none", borderRadius:8, padding:"9px 12px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
                 <button onClick={saveChannel} disabled={savingCh||!newChName.trim()||!newChUrl.trim()}
                   style={{ background:savingCh||!newChName.trim()||!newChUrl.trim()?"#f4f4f5":"#18181b", color:savingCh||!newChName.trim()||!newChUrl.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:8, padding:"9px", fontWeight:600, fontSize:13, cursor:"pointer" }}>
                   {savingCh?"Saving…":"Add channel"}
                 </button>
               </div>
             </div>
-
             <button onClick={logout} style={{ background:"#fff", border:"1px solid #fecaca", borderRadius:10, padding:"12px", color:"#ef4444", fontWeight:600, fontSize:13, cursor:"pointer" }}>Log out</button>
           </div>
         </div>
