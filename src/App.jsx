@@ -4,17 +4,19 @@ const PASSWORDS = {
   owner:    "Hooperlink69",
   manager:  "manager2026",
   linktree: "linktree2026",
+  facebook: "facebook2026",
   teammate: "team2026",
 };
 const FB = { apiKey: "AIzaSyAzCqX4CzYsm0LfMpPKDL9NYEZ-FWKSajg", projectId: "contentvault-434f1" };
 const FS = `https://firestore.googleapis.com/v1/projects/${FB.projectId}/databases/(default)/documents`;
 
-const ROLE_LABELS = { owner: "Owner", manager: "Content Manager", linktree: "Linktree Manager", teammate: "Teammate" };
-const ROLE_COLORS = { owner: "#18181b", manager: "#6366f1", linktree: "#059669", teammate: "#0ea5e9" };
+const ROLE_LABELS = { owner: "Owner", manager: "Content Manager", linktree: "Linktree Manager", facebook: "Facebook Manager", teammate: "Teammate" };
+const ROLE_COLORS = { owner: "#18181b", manager: "#6366f1", linktree: "#059669", facebook: "#1877f2", teammate: "#0ea5e9" };
 
 function canSeeAll(r)    { return r === "owner" || r === "manager"; }
 function canRemoveAll(r) { return r === "owner" || r === "manager"; }
 function canBrowse(r)    { return r === "owner" || r === "manager" || r === "linktree"; }
+function canFacebook(r)  { return r === "owner" || r === "manager" || r === "facebook"; }
 function canEdit(r)      { return r !== "linktree"; }
 
 // ─── localStorage cache helpers ───────────────────────────────
@@ -433,6 +435,8 @@ export default function App() {
   const [showAll, setShowAll] = useState(false);
   const [browseExpanded, setBrowseExpanded] = useState(null);
   const [browseTab, setBrowseTab] = useState("unused");
+  const [browseSearch, setBrowseSearch] = useState("");
+  const [fbTab, setFbTab] = useState("all"); // "all" | "available" | "taken"
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [newProdName, setNewProdName] = useState("");
@@ -650,6 +654,7 @@ export default function App() {
     if (p===PASSWORDS.owner) return "owner";
     if (p===PASSWORDS.manager) return "manager";
     if (p===PASSWORDS.linktree) return "linktree";
+    if (p===PASSWORDS.facebook) return "facebook";
     if (p===PASSWORDS.teammate) return "teammate";
     return null;
   }
@@ -799,7 +804,7 @@ export default function App() {
     {id:"browse",  label:"Browse",  show:canBrowse(user.role)},
     {id:"winning", label:"Winning", show:true},
     {id:"chat",    label:"Chat",    show:canEdit(user.role)},
-    {id:"admin",   label:"Admin",   show:canSeeAll(user.role)},
+    {id:"facebook", label:"Facebook", show:canFacebook(user.role)},
     {id:"profile", label:"Profile", show:true},
   ].filter(n=>n.show);
 
@@ -836,7 +841,7 @@ export default function App() {
         <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #ebebeb", display:"flex", zIndex:20, paddingBottom:"env(safe-area-inset-bottom)" }}>
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{ flex:1, background:"none", border:"none", padding:"10px 0 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-              <span style={{ fontSize:18 }}>{n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":"👤"}</span>
+              <span style={{ fontSize:18 }}>{n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":n.id==="facebook"?"📘":"👤"}</span>
               <span style={{ fontSize:10, color:page===n.id?"#18181b":"#a1a1aa", fontWeight:page===n.id?600:400 }}>{n.label}</span>
             </button>
           ))}
@@ -1008,7 +1013,12 @@ export default function App() {
           const latest = Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0));
           if (latest === 0) return true;
           return Math.floor((now - latest) / 86400000) >= 7;
-        });
+        }).filter(a => !browseSearch || a.username.toLowerCase().includes(browseSearch.toLowerCase()) || (a.owner||"").toLowerCase().includes(browseSearch.toLowerCase()));
+        
+        // Search-filtered full accounts list
+        const searchedAccounts = browseSearch
+          ? accounts.filter(a => a.username.toLowerCase().includes(browseSearch.toLowerCase()) || (a.owner||"").toLowerCase().includes(browseSearch.toLowerCase()))
+          : accounts;
 
         const getLatest = x => {
           const keys = Object.keys(x).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
@@ -1034,8 +1044,17 @@ export default function App() {
               <div style={{ padding:`12px ${isMobile?14:20}px 0` }}>
                 <div style={{ fontSize:14, fontWeight:700 }}>Browse</div>
               </div>
+              {/* Search bar */}
+              <div style={{ padding:`8px ${isMobile?14:20}px 4px` }}>
+                <input
+                  value={browseSearch}
+                  onChange={e=>{ setBrowseSearch(e.target.value); setBrowseExpanded(null); }}
+                  placeholder="Search sources or interns…"
+                  style={{ width:"100%", background:"#f4f4f5", border:"none", borderRadius:8, padding:"8px 12px", color:"#18181b", fontSize:13, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}
+                />
+              </div>
               {/* Tab switcher */}
-              <div style={{ display:"flex", padding:`8px ${isMobile?14:20}px 0`, gap:4 }}>
+              <div style={{ display:"flex", padding:`4px ${isMobile?14:20}px 0`, gap:4 }}>
                 {tabs.map(t => (
                   <button key={t.id} onClick={()=>{ setBrowseTab(t.id); setBrowseExpanded(null); }}
                     style={{
@@ -1087,9 +1106,9 @@ export default function App() {
             {/* ── ALL SOURCES TAB ── */}
             {activeBrowseTab==="all" && (
               <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
-                {accounts.length === 0 ? (
-                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa", fontSize:14 }}>No sources yet.</div>
-                ) : accounts.sort((a,b)=>(a.username||"").localeCompare(b.username||"")).map(a => {
+                {searchedAccounts.length === 0 ? (
+                  <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa", fontSize:14 }}>{browseSearch ? "No results." : "No sources yet."}</div>
+                ) : searchedAccounts.sort((a,b)=>(a.username||"").localeCompare(b.username||"")).map(a => {
                   const latest = getLatest(a);
                   const daysSince = latest ? Math.floor((now - latest) / 86400000) : null;
                   const isUnused = daysSince === null || daysSince >= 7;
@@ -1119,8 +1138,11 @@ export default function App() {
                 {users.filter(u=>u.role==="teammate").length===0 ? (
                   <div style={{ padding:"60px 20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No teammates yet.</div>
                 ) : users.filter(u=>u.role==="teammate").map((u,i,arr)=>{
-                  const uAccounts = accounts.filter(a=>a.owner===u.displayName);
-                  const isOpen = browseExpanded===u.username;
+                  const uAccounts = (browseSearch
+                    ? accounts.filter(a => a.owner===u.displayName && (a.username.toLowerCase().includes(browseSearch.toLowerCase())))
+                    : accounts.filter(a=>a.owner===u.displayName));
+                  if (browseSearch && uAccounts.length === 0) return null;
+                  const isOpen = browseExpanded===u.username || !!browseSearch;
                   return (
                     <div key={u.id} style={{ borderBottom: i<arr.length-1?"1px solid #f2f2f2":"none" }}>
                       <div onClick={()=>setBrowseExpanded(isOpen?null:u.username)}
@@ -1269,58 +1291,141 @@ export default function App() {
         </div>
       )}
 
-      {/* ── ADMIN ── */}
-      {page==="admin" && canSeeAll(user.role) && (
-        <div style={{ flex:1, overflow:"auto", paddingBottom: isMobile ? 70 : 0 }}>
-          <div style={{ padding:`14px ${isMobile?14:20}px`, borderBottom:"1px solid #ebebeb", background:"#fff" }}>
-            <div style={{ fontSize:14, fontWeight:600 }}>Admin Panel</div>
-          </div>
-          <div style={{ padding:`14px ${isMobile?14:20}px` }}>
-            <div style={{ display:"flex", background:"#f4f4f5", borderRadius:7, padding:3, marginBottom:16, width:"fit-content" }}>
-              {[{id:"accounts",l:"Accounts"},{id:"members",l:"Members"}].map(t=>(
-                <button key={t.id} onClick={()=>setAdminTab(t.id)} style={{ background:adminTab===t.id?"#fff":"transparent", border:"none", borderRadius:5, padding:"5px 14px", color:adminTab===t.id?"#18181b":"#71717a", fontWeight:adminTab===t.id?600:400, fontSize:13, cursor:"pointer", boxShadow:adminTab===t.id?"0 1px 3px rgba(0,0,0,0.07)":"none" }}>{t.l}</button>
-              ))}
+      {/* Admin tab removed — Facebook tab replaces it */}
+      {/* ── FACEBOOK PAGE ── */}
+      {page==="facebook" && canFacebook(user.role) && (() => {
+        const getFbStatus = a => a.fbStatus || "unchecked";
+        const teammates = users.filter(u => u.role === "teammate");
+
+        const fbTabs = [
+          { id:"all",       label:"All" },
+          { id:"available", label:`Available` },
+          { id:"taken",     label:`Taken` },
+        ];
+
+        const handleFbMark = async (sourceId, status) => {
+          await fsPatch("sources", sourceId, { fbStatus: status });
+          setAccounts(prev => prev.map(a => a.id===sourceId ? {...a, fbStatus:status} : a));
+          const updated = accounts.map(a => a.id===sourceId ? {...a, fbStatus:status} : a);
+          saveCache("cv_accounts", updated);
+        };
+
+        // Filter sources based on active tab
+        const filteredSources = accounts.filter(a => {
+          const s = getFbStatus(a);
+          if (fbTab === "available") return s === "available";
+          if (fbTab === "taken") return s === "taken";
+          return true;
+        });
+
+        // Group by owner for "all" tab
+        const byTeammate = teammates.map(u => ({
+          ...u,
+          sources: filteredSources.filter(a => a.owner === u.displayName),
+        })).filter(u => u.sources.length > 0);
+
+        const StatusBadge = ({ status }) => {
+          const cfg = {
+            available: { bg:"#dcfce7", color:"#16a34a", label:"✅ Available" },
+            taken:     { bg:"#fee2e2", color:"#dc2626", label:"❌ Taken" },
+            unchecked: { bg:"#f4f4f5", color:"#71717a", label:"— Unchecked" },
+          }[status] || { bg:"#f4f4f5", color:"#71717a", label:"— Unchecked" };
+          return <span style={{ background:cfg.bg, color:cfg.color, borderRadius:20, padding:"2px 9px", fontSize:11, fontWeight:600 }}>{cfg.label}</span>;
+        };
+
+        return (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", paddingBottom: isMobile?70:0 }}>
+            {/* Header */}
+            <div style={{ background:"#fff", borderBottom:"1px solid #ebebeb", flexShrink:0 }}>
+              <div style={{ padding:`12px ${isMobile?14:20}px 0`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>Facebook Manager</div>
+                  <div style={{ fontSize:12, color:"#a1a1aa", marginTop:2 }}>
+                    {accounts.filter(a=>getFbStatus(a)==="available").length} available · {accounts.filter(a=>getFbStatus(a)==="taken").length} taken · {accounts.filter(a=>getFbStatus(a)==="unchecked").length} unchecked
+                  </div>
+                </div>
+              </div>
+              {/* Tabs */}
+              <div style={{ display:"flex", padding:`8px ${isMobile?14:20}px 0`, gap:4 }}>
+                {fbTabs.map(t => (
+                  <button key={t.id} onClick={()=>setFbTab(t.id)}
+                    style={{
+                      background: fbTab===t.id ? "#1877f2" : "transparent",
+                      color: fbTab===t.id ? "#fff" : "#71717a",
+                      border: fbTab===t.id ? "none" : "1px solid #e5e5e5",
+                      borderRadius:"8px 8px 0 0", padding:"7px 14px", fontSize:13,
+                      fontWeight: fbTab===t.id ? 600 : 400, cursor:"pointer", transition:"all .15s",
+                    }}>{t.label}</button>
+                ))}
+              </div>
             </div>
-            {adminTab==="accounts" && (
-              <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, overflow:"hidden" }}>
-                {accounts.length===0 ? <div style={{ padding:"40px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No accounts yet.</div>
-                : accounts.sort((a,b)=>(b.addedAt||"").localeCompare(a.addedAt||"")).map((a,i,arr)=>(
-                  <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?12:16}px`, borderBottom:i<arr.length-1?"1px solid #f2f2f2":"none" }}>
-                    <Avatar name={a.username} size={34} />
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <a href={`https://www.instagram.com/${a.username}`} target="_blank" rel="noreferrer"
-                        style={{ fontWeight:500, fontSize:13, color:"#18181b", textDecoration:"none", overflow:"hidden", textOverflow:"ellipsis", display:"block", whiteSpace:"nowrap" }}>
-                        {isMobile ? a.username : `instagram.com/${a.username}`}
-                      </a>
-                      <div style={{ fontSize:11, color:nameColor(a.owner), fontWeight:500, marginTop:1 }}>{a.owner}{a.postedTo ? ` · ${a.postedTo}` : ""}</div>
+
+            {/* Content */}
+            <div style={{ flex:1, overflow:"auto", background:"#fff" }}>
+              {byTeammate.length === 0 ? (
+                <div style={{ textAlign:"center", padding:"80px 20px", color:"#a1a1aa" }}>
+                  <div style={{ fontSize:32, marginBottom:10 }}>📭</div>
+                  <div style={{ fontSize:14 }}>No sources to show.</div>
+                </div>
+              ) : byTeammate.map((u, ui, uarr) => {
+                const isOpen = browseExpanded === `fb_${u.username}`;
+                const checkedCount = u.sources.filter(a => getFbStatus(a) !== "unchecked").length;
+                return (
+                  <div key={u.id} style={{ borderBottom: ui<uarr.length-1?"1px solid #f2f2f2":"none" }}>
+                    {/* Teammate header row */}
+                    <div onClick={()=>setBrowseExpanded(isOpen ? null : `fb_${u.username}`)}
+                      style={{ display:"flex", alignItems:"center", gap:12, padding:`11px ${isMobile?14:20}px`, cursor:"pointer", background:"#fff" }}>
+                      <Avatar name={u.displayName} size={46} />
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:600, fontSize:14 }}>{u.displayName}</div>
+                        <div style={{ fontSize:12, color:"#a1a1aa", marginTop:1, display:"flex", gap:8 }}>
+                          <span>{u.sources.length} source{u.sources.length!==1?"s":""}</span>
+                          <span style={{ color:"#16a34a" }}>{u.sources.filter(a=>getFbStatus(a)==="available").length} available</span>
+                          <span style={{ color:"#dc2626" }}>{u.sources.filter(a=>getFbStatus(a)==="taken").length} taken</span>
+                          {checkedCount < u.sources.length && <span style={{ color:"#f59e0b" }}>{u.sources.length - checkedCount} unchecked</span>}
+                        </div>
+                      </div>
+                      <span style={{ color:"#d4d4d4", fontSize:12, transform:isOpen?"rotate(90deg)":"rotate(0deg)", transition:"transform .2s", display:"inline-block" }}>▶</span>
                     </div>
-                    <span style={{ fontSize:11, color:"#c7c7c7", flexShrink:0 }}>{a.addedAt}</span>
-                    <button onClick={()=>{ if(window.confirm(`Remove @${a.username}?`)) removeAccount(a.id); }}
-                      style={{ background:"none", border:"1px solid #e5e5e5", borderRadius:5, cursor:"pointer", fontSize:11, padding:"3px 8px", color:"#a1a1aa", fontWeight:500, flexShrink:0 }}
-                      onMouseEnter={e=>{ e.currentTarget.style.background="#fef2f2"; e.currentTarget.style.color="#ef4444"; }}
-                      onMouseLeave={e=>{ e.currentTarget.style.background="none"; e.currentTarget.style.color="#a1a1aa"; }}>Remove</button>
+
+                    {/* Sources dropdown */}
+                    {isOpen && (
+                      <div style={{ background:"#fafaf9", borderTop:"1px solid #f2f2f2" }}>
+                        {u.sources.map(a => {
+                          const status = getFbStatus(a);
+                          return (
+                            <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?20:28, borderBottom:"1px solid #f2f2f2" }}>
+                              <Avatar name={a.username} size={36} />
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontWeight:500, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                                <div style={{ marginTop:3 }}><StatusBadge status={status} /></div>
+                              </div>
+                              {/* Mark buttons */}
+                              <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                                <button
+                                  onClick={()=>handleFbMark(a.id, status==="available" ? "unchecked" : "available")}
+                                  style={{ background: status==="available"?"#dcfce7":"#f4f4f5", border: status==="available"?"1.5px solid #86efac":"1.5px solid #e5e5e5", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, color: status==="available"?"#16a34a":"#71717a", cursor:"pointer" }}>
+                                  ✅
+                                </button>
+                                <button
+                                  onClick={()=>handleFbMark(a.id, status==="taken" ? "unchecked" : "taken")}
+                                  style={{ background: status==="taken"?"#fee2e2":"#f4f4f5", border: status==="taken"?"1.5px solid #fca5a5":"1.5px solid #e5e5e5", borderRadius:8, padding:"5px 10px", fontSize:12, fontWeight:600, color: status==="taken"?"#dc2626":"#71717a", cursor:"pointer" }}>
+                                  ❌
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-            {adminTab==="members" && (
-              <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, overflow:"hidden" }}>
-                {users.length===0 ? <div style={{ padding:"40px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No members yet.</div>
-                : users.sort((a,b)=>{const o={owner:0,manager:1,linktree:2,teammate:3};return(o[a.role]||3)-(o[b.role]||3);}).map((u,i,arr)=>(
-                  <div key={u.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?12:16}px`, borderBottom:i<arr.length-1?"1px solid #f2f2f2":"none" }}>
-                    <Avatar name={u.displayName} size={34} />
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontWeight:500, fontSize:13 }}>{u.displayName}</div>
-                      <div style={{ fontSize:11, color:ROLE_COLORS[u.role], fontWeight:600, marginTop:1 }}>{ROLE_LABELS[u.role]}</div>
-                    </div>
-                    <span style={{ fontSize:12, color:"#a1a1aa" }}>{accounts.filter(a=>a.owner===u.displayName).length} sources</span>
-                  </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       {/* ── PROFILE ── */}
       {page==="profile" && (
@@ -1367,7 +1472,24 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <button onClick={logout} style={{ background:"#fff", border:"1px solid #fecaca", borderRadius:10, padding:"12px", color:"#ef4444", fontWeight:600, fontSize:13, cursor:"pointer" }}>Log out</button>
+            {/* Members list — owner + manager only */}
+            {canSeeAll(user.role) && (
+              <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, overflow:"hidden" }}>
+                <div style={{ padding:"12px 16px", borderBottom:"1px solid #f2f2f2", fontWeight:600, fontSize:13 }}>Team Members</div>
+                {users.length===0 ? <div style={{ padding:"20px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>No members yet.</div>
+                : users.sort((a,b)=>{const o={owner:0,manager:1,linktree:2,facebook:3,teammate:4};return(o[a.role]||4)-(o[b.role]||4);}).map((u,i,arr)=>(
+                  <div key={u.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?12:16}px`, borderBottom:i<arr.length-1?"1px solid #f2f2f2":"none" }}>
+                    <Avatar name={u.displayName} size={34} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:500, fontSize:13 }}>{u.displayName}</div>
+                      <div style={{ fontSize:11, color:ROLE_COLORS[u.role]||"#71717a", fontWeight:600, marginTop:1 }}>{ROLE_LABELS[u.role]||u.role}</div>
+                    </div>
+                    <span style={{ fontSize:12, color:"#a1a1aa" }}>{accounts.filter(a=>a.owner===u.displayName).length} sources</span>
+                  </div>
+                ))}
+              </div>
+            )}
+                        <button onClick={logout} style={{ background:"#fff", border:"1px solid #fecaca", borderRadius:10, padding:"12px", color:"#ef4444", fontWeight:600, fontSize:13, cursor:"pointer" }}>Log out</button>
           </div>
         </div>
       )}
