@@ -439,6 +439,15 @@ export default function App() {
   const [fbTab, setFbTab] = useState("all"); // "all" | "available" | "taken"
   const [products, setProducts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [slItems, setSlItems] = useState([]); // source library items
+  const [slCats, setSlCats] = useState([]);   // source library categories
+  const [slActiveCat, setSlActiveCat] = useState(null); // null = overview
+  const [slTab, setSlTab] = useState("unused"); // "unused" | "used"
+  const [slNewCatName, setSlNewCatName] = useState("");
+  const [slShowNewCat, setSlShowNewCat] = useState(false);
+  const [slSavingCat, setSlSavingCat] = useState(false);
+  const [slIdleSearch, setSlIdleSearch] = useState("");
+  const [slMoving, setSlMoving] = useState(null); // id being moved
   const [newProdName, setNewProdName] = useState("");
   const [newProdImg, setNewProdImg] = useState("");
   const [newProdLink, setNewProdLink] = useState("");
@@ -478,6 +487,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     refresh(); loadChannels(); loadProducts(); loadCats();
+    if (canSeeAll(user.role)) { loadSlCats(); loadSlItems(); }
     // Poll every 30 minutes only — NOT on visibilitychange
     pollRef.current = setInterval(refresh, 30 * 60 * 1000);
     return () => clearInterval(pollRef.current);
@@ -628,6 +638,82 @@ export default function App() {
   async function handleFlag(id, flagValue) {
     await fsPatch("sources", id, { flag: flagValue });
     setAccounts(prev => prev.map(a => a.id===id ? {...a, flag:flagValue} : a));
+  }
+
+  // ── SOURCE LIBRARY ──────────────────────────────────────────
+  async function loadSlCats() {
+    try {
+      const docs = await fsGet("sl_cats");
+      if (docs) setSlCats(docs.sort((a,b) => (a.name||"").localeCompare(b.name||"")));
+    } catch {}
+  }
+
+  async function loadSlItems() {
+    try {
+      const docs = await fsGet("sl_items");
+      if (docs) setSlItems(docs);
+    } catch {}
+  }
+
+  async function slCreateCat() {
+    if (!slNewCatName.trim()) return;
+    setSlSavingCat(true);
+    const id = "slc_" + Date.now();
+    try {
+      await fsSet("sl_cats", id, { name: slNewCatName.trim(), createdAt: new Date().toISOString() });
+      await loadSlCats();
+      setSlNewCatName(""); setSlShowNewCat(false);
+    } catch {}
+    setSlSavingCat(false);
+  }
+
+  async function slDeleteCat(id) {
+    if (!window.confirm("Delete this category? Items in it will be unassigned.")) return;
+    await fsDelete("sl_cats", id);
+    setSlCats(prev => prev.filter(c => c.id !== id));
+    // unassign items from this cat
+    const affected = slItems.filter(i => i.catId === id);
+    for (const item of affected) {
+      await fsPatch("sl_items", item.id, { catId: "" });
+    }
+    setSlItems(prev => prev.map(i => i.catId === id ? {...i, catId:""} : i));
+    if (slActiveCat === id) setSlActiveCat(null);
+  }
+
+  async function slMoveIn(account) {
+    // Move a source from intern pool → Source Library
+    setSlMoving(account.id);
+    try {
+      const id = "sli_" + Date.now();
+      await fsSet("sl_items", id, {
+        username: account.username,
+        originalOwner: account.owner || "",
+        addedAt: new Date().toISOString(),
+        status: "unused", // "unused" | "used"
+        catId: "",
+      });
+      // Remove from intern pool
+      await fsDelete("sources", account.id);
+      setAccounts(prev => prev.filter(a => a.id !== account.id));
+      await loadSlItems();
+    } catch {}
+    setSlMoving(null);
+  }
+
+  async function slSetStatus(id, status) {
+    await fsPatch("sl_items", id, { status });
+    setSlItems(prev => prev.map(i => i.id===id ? {...i, status} : i));
+  }
+
+  async function slAssignCat(id, catId) {
+    await fsPatch("sl_items", id, { catId });
+    setSlItems(prev => prev.map(i => i.id===id ? {...i, catId} : i));
+  }
+
+  async function slRemoveItem(id, username) {
+    if (!window.confirm(`Permanently remove @${username} from Source Library?`)) return;
+    await fsDelete("sl_items", id);
+    setSlItems(prev => prev.filter(i => i.id !== id));
   }
 
   async function handleVisit(id) {
@@ -802,6 +888,7 @@ export default function App() {
   const navItems = [
     {id:"sources", label:"Sources", show:true},
     {id:"browse",  label:"Browse",  show:canBrowse(user.role)},
+    {id:"library", label:"Library", show:canSeeAll(user.role)},
     {id:"winning", label:"Winning", show:true},
     {id:"chat",    label:"Chat",    show:canEdit(user.role)},
     {id:"facebook", label:"Facebook", show:canFacebook(user.role)},
@@ -841,7 +928,7 @@ export default function App() {
         <div style={{ position:"fixed", bottom:0, left:0, right:0, background:"#fff", borderTop:"1px solid #ebebeb", display:"flex", zIndex:20, paddingBottom:"env(safe-area-inset-bottom)" }}>
           {navItems.map(n=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{ flex:1, background:"none", border:"none", padding:"10px 0 8px", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
-              <span style={{ fontSize:18 }}>{n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":n.id==="facebook"?"📘":"👤"}</span>
+              <span style={{ fontSize:18 }}>{n.id==="sources"?"📋":n.id==="browse"?"👥":n.id==="library"?"📚":n.id==="winning"?"🏆":n.id==="chat"?"💬":n.id==="admin"?"🛡️":n.id==="facebook"?"📘":"👤"}</span>
               <span style={{ fontSize:10, color:page===n.id?"#18181b":"#a1a1aa", fontWeight:page===n.id?600:400 }}>{n.label}</span>
             </button>
           ))}
@@ -1184,6 +1271,209 @@ export default function App() {
         );
       })()}
 
+
+      {/* ── SOURCE LIBRARY ── */}
+      {page==="library" && canSeeAll(user.role) && (() => {
+        const now = Date.now();
+
+        // Idle sources: not visited in 5+ days, not already in library
+        const slItemUsernames = new Set(slItems.map(i => i.username));
+        const idleSources = accounts.filter(a => {
+          if (slItemUsernames.has(a.username)) return false;
+          const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+          if (keys.length === 0) return true;
+          const latest = Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0));
+          const days = latest === 0 ? 999 : Math.floor((now - latest) / 86400000);
+          return days >= 5;
+        }).filter(a => !slIdleSearch || a.username.toLowerCase().includes(slIdleSearch.toLowerCase()) || (a.owner||"").toLowerCase().includes(slIdleSearch.toLowerCase()));
+
+        const activeCatObj = slCats.find(c => c.id === slActiveCat);
+
+        // Items for active category
+        const catItems = slActiveCat
+          ? slItems.filter(i => i.catId === slActiveCat)
+          : [];
+        const unusedItems = catItems.filter(i => i.status === "used" ? false : true);
+        const usedItems = catItems.filter(i => i.status === "used");
+
+        // Unassigned items (no category)
+        const unassigned = slItems.filter(i => !i.catId);
+
+        return (
+          <div style={{ flex:1, display:"flex", flexDirection:"column", paddingBottom: isMobile ? 70 : 0, overflow:"hidden" }}>
+            {/* Header */}
+            <div style={{ background:"#fff", borderBottom:"1px solid #ebebeb", flexShrink:0 }}>
+              <div style={{ padding:`12px ${isMobile?14:20}px 10px`, display:"flex", alignItems:"center", gap:10 }}>
+                {slActiveCat ? (
+                  <button onClick={()=>{ setSlActiveCat(null); setSlTab("unused"); }} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, fontWeight:600, color:"#18181b", padding:0 }}>← {activeCatObj?.name||"Category"}</button>
+                ) : (
+                  <span style={{ fontWeight:700, fontSize:14 }}>📚 Source Library</span>
+                )}
+                {slActiveCat && (
+                  <div style={{ marginLeft:"auto", display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
+                    {["unused","used"].map(t => (
+                      <button key={t} onClick={()=>setSlTab(t)} style={{ background:slTab===t?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 12px", fontSize:12, fontWeight:slTab===t?600:400, color:slTab===t?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:slTab===t?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>
+                        {t==="unused"?`Unused (${unusedItems.length})`:`Used (${usedItems.length})`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ flex:1, overflow:"auto" }}>
+
+              {/* ── OVERVIEW (no active cat) ── */}
+              {!slActiveCat && (
+                <div style={{ padding:`0 ${isMobile?14:20}px 20px` }}>
+
+                  {/* Idle sources section */}
+                  <div style={{ marginTop:16, marginBottom:20 }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                      <div>
+                        <div style={{ fontWeight:700, fontSize:13 }}>⏱ Idle Sources</div>
+                        <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>Not visited in 5+ days. Move them into a category.</div>
+                      </div>
+                      <span style={{ background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700 }}>{idleSources.length}</span>
+                    </div>
+                    <input value={slIdleSearch} onChange={e=>setSlIdleSearch(e.target.value)} placeholder="Search idle sources…"
+                      style={{ width:"100%", background:"#f4f4f5", border:"none", borderRadius:8, padding:"8px 12px", fontSize:13, outline:"none", fontFamily:"inherit", marginBottom:10, boxSizing:"border-box" }} />
+                    {idleSources.length === 0 ? (
+                      <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"24px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
+                        {slIdleSearch ? "No results." : "✅ No idle sources right now."}
+                      </div>
+                    ) : idleSources.slice(0,30).map(a => {
+                      const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+                      const latest = keys.length ? Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0)) : 0;
+                      const days = latest === 0 ? null : Math.floor((now - latest) / 86400000);
+                      return (
+                        <div key={a.id} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"11px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
+                          <Avatar name={a.username} size={38} />
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                            <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>
+                              {a.owner}
+                              {days !== null && <span style={{ marginLeft:6, background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"1px 6px", fontWeight:600, fontSize:10 }}>{days}d idle</span>}
+                              {days === null && <span style={{ marginLeft:6, background:"#f3f4f6", color:"#9ca3af", borderRadius:20, padding:"1px 6px", fontWeight:600, fontSize:10 }}>never visited</span>}
+                            </div>
+                          </div>
+                          <button onClick={()=>window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer")}
+                            style={{ border:"1.5px solid #dbdbdb", borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:600, color:"#18181b", background:"#fff", cursor:"pointer", flexShrink:0 }}>Open</button>
+                          <button onClick={()=>slMoveIn(a)} disabled={slMoving===a.id}
+                            style={{ border:"none", borderRadius:7, padding:"4px 12px", fontSize:11, fontWeight:600, color:"#fff", background:slMoving===a.id?"#a1a1aa":"#6366f1", cursor:slMoving===a.id?"not-allowed":"pointer", flexShrink:0 }}>
+                            {slMoving===a.id?"…":"Move in"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {idleSources.length > 30 && <div style={{ textAlign:"center", fontSize:12, color:"#a1a1aa", marginTop:6 }}>+ {idleSources.length-30} more. Use search to narrow down.</div>}
+                  </div>
+
+                  {/* Unassigned items */}
+                  {unassigned.length > 0 && (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontWeight:700, fontSize:13, marginBottom:8 }}>📥 Unassigned ({unassigned.length})</div>
+                      {unassigned.map(item => (
+                        <div key={item.id} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"10px 14px", marginBottom:6, display:"flex", alignItems:"center", gap:10 }}>
+                          <Avatar name={item.username} size={36} />
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontWeight:600, fontSize:13 }}>{item.username}</div>
+                            <div style={{ fontSize:11, color:"#a1a1aa" }}>from {item.originalOwner || "unknown"}</div>
+                          </div>
+                          <select onChange={e=>{ if(e.target.value) slAssignCat(item.id, e.target.value); e.target.value=""; }} defaultValue=""
+                            style={{ border:"1.5px solid #e5e5e5", borderRadius:7, padding:"4px 8px", fontSize:11, fontWeight:600, color:"#18181b", background:"#fff", cursor:"pointer", flexShrink:0 }}>
+                            <option value="" disabled>Assign cat</option>
+                            {slCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                          <button onClick={()=>slRemoveItem(item.id, item.username)}
+                            style={{ border:"1.5px solid #fca5a5", borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:600, color:"#ef4444", background:"#fff", cursor:"pointer", flexShrink:0 }}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Categories grid */}
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                    <div style={{ fontWeight:700, fontSize:13 }}>Product Categories</div>
+                    <button onClick={()=>setSlShowNewCat(true)} style={{ background:"#18181b", color:"#fff", border:"none", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>+ New</button>
+                  </div>
+
+                  {slShowNewCat && (
+                    <div style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:10, padding:"12px 14px", marginBottom:12, display:"flex", gap:8 }}>
+                      <input autoFocus value={slNewCatName} onChange={e=>setSlNewCatName(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") slCreateCat(); }}
+                        placeholder="e.g. Dinosaur Costume" style={{ flex:1, background:"#f4f4f5", border:"none", borderRadius:7, padding:"8px 10px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                      <button onClick={slCreateCat} disabled={slSavingCat||!slNewCatName.trim()} style={{ background:slSavingCat||!slNewCatName.trim()?"#f4f4f5":"#18181b", color:slSavingCat||!slNewCatName.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:7, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>{slSavingCat?"…":"Create"}</button>
+                      <button onClick={()=>{ setSlShowNewCat(false); setSlNewCatName(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:18, padding:"4px" }}>×</button>
+                    </div>
+                  )}
+
+                  {slCats.length === 0 ? (
+                    <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"32px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
+                      No categories yet. Create one to start organising sources.
+                    </div>
+                  ) : (
+                    <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10 }}>
+                      {slCats.map(cat => {
+                        const total = slItems.filter(i => i.catId === cat.id).length;
+                        const unused = slItems.filter(i => i.catId === cat.id && i.status !== "used").length;
+                        const used = slItems.filter(i => i.catId === cat.id && i.status === "used").length;
+                        return (
+                          <div key={cat.id} onClick={()=>{ setSlActiveCat(cat.id); setSlTab("unused"); }}
+                            style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:12, padding:"14px", cursor:"pointer", transition:"border .15s" }}
+                            onMouseEnter={e=>e.currentTarget.style.border="1px solid #6366f1"}
+                            onMouseLeave={e=>e.currentTarget.style.border="1px solid #ebebeb"}>
+                            <div style={{ fontWeight:700, fontSize:13, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cat.name}</div>
+                            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                              <span style={{ background:"#f0fdf4", color:"#16a34a", borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:600 }}>{unused} unused</span>
+                              <span style={{ background:"#f1f5f9", color:"#64748b", borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:600 }}>{used} used</span>
+                            </div>
+                            <div style={{ marginTop:8, display:"flex", justifyContent:"flex-end" }}>
+                              <button onClick={e=>{ e.stopPropagation(); slDeleteCat(cat.id); }}
+                                style={{ background:"none", border:"none", cursor:"pointer", color:"#d4d4d4", fontSize:13, padding:0, fontWeight:600 }}
+                                onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>delete</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── CATEGORY DETAIL ── */}
+              {slActiveCat && (
+                <div>
+                  {(slTab==="unused" ? unusedItems : usedItems).length === 0 ? (
+                    <div style={{ textAlign:"center", padding:"60px 20px", color:"#a1a1aa" }}>
+                      <div style={{ fontSize:28, marginBottom:8 }}>{slTab==="unused"?"✅":"📭"}</div>
+                      <div style={{ fontSize:13 }}>{slTab==="unused" ? "No unused sources in this category." : "No used sources yet."}</div>
+                    </div>
+                  ) : (slTab==="unused" ? unusedItems : usedItems).map(item => (
+                    <div key={item.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`11px ${isMobile?14:20}px`, borderBottom:"1px solid #f2f2f2", background:"#fff" }}>
+                      <Avatar name={item.username} size={40} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:14, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.username}</div>
+                        <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>from {item.originalOwner||"unknown"}</div>
+                      </div>
+                      <button onClick={()=>window.open(`https://www.instagram.com/${item.username}`,"_blank","noreferrer")}
+                        style={{ border:"1.5px solid #dbdbdb", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:600, color:"#18181b", background:"#fff", cursor:"pointer", flexShrink:0 }}>Open</button>
+                      {slTab==="unused" ? (
+                        <button onClick={()=>slSetStatus(item.id,"used")}
+                          style={{ border:"none", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#fff", background:"#16a34a", cursor:"pointer", flexShrink:0 }}>Mark Used</button>
+                      ) : (
+                        <button onClick={()=>slSetStatus(item.id,"unused")}
+                          style={{ border:"1.5px solid #e5e5e5", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, color:"#71717a", background:"#fff", cursor:"pointer", flexShrink:0 }}>Mark Unused</button>
+                      )}
+                      <button onClick={()=>slRemoveItem(item.id, item.username)}
+                        style={{ border:"1.5px solid #fca5a5", borderRadius:7, padding:"5px 10px", fontSize:12, fontWeight:600, color:"#ef4444", background:"#fff", cursor:"pointer", flexShrink:0 }}>Remove</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── CHAT ── */}
       {page==="chat" && canEdit(user.role) && (
