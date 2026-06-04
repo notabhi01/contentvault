@@ -448,6 +448,7 @@ export default function App() {
   const [slSavingCat, setSlSavingCat] = useState(false);
   const [slIdleSearch, setSlIdleSearch] = useState("");
   const [slMoving, setSlMoving] = useState(null); // id being moved
+  const [slOverviewTab, setSlOverviewTab] = useState("idle"); // "idle" | "unassigned" | "categories"
   const [newProdName, setNewProdName] = useState("");
   const [newProdImg, setNewProdImg] = useState("");
   const [newProdLink, setNewProdLink] = useState("");
@@ -1309,12 +1310,30 @@ export default function App() {
                 ) : (
                   <span style={{ fontWeight:700, fontSize:14 }}>📚 Source Library</span>
                 )}
-                {slActiveCat && (
+                {slActiveCat ? (
                   <div style={{ marginLeft:"auto", display:"flex", background:"#f4f4f5", borderRadius:7, padding:2 }}>
                     {["unused","used"].map(t => (
                       <button key={t} onClick={()=>setSlTab(t)} style={{ background:slTab===t?"#fff":"transparent", border:"none", borderRadius:5, padding:"4px 12px", fontSize:12, fontWeight:slTab===t?600:400, color:slTab===t?"#18181b":"#a1a1aa", cursor:"pointer", transition:"all .15s", boxShadow:slTab===t?"0 1px 3px rgba(0,0,0,0.08)":"none" }}>
                         {t==="unused"?`Unused (${unusedItems.length})`:`Used (${usedItems.length})`}
                       </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ marginLeft:"auto", display:"flex", gap:4 }}>
+                    {[
+                      { id:"idle", label:`Idle (${idleSources.length})` },
+                      { id:"unassigned", label:`Unassigned (${unassigned.length})` },
+                      { id:"categories", label:"Categories" },
+                    ].map(t => (
+                      <button key={t.id} onClick={()=>setSlOverviewTab(t.id)}
+                        style={{
+                          background: slOverviewTab===t.id ? "#18181b" : "transparent",
+                          color: slOverviewTab===t.id ? "#fff" : "#71717a",
+                          border: slOverviewTab===t.id ? "none" : "1px solid #e5e5e5",
+                          borderRadius:8, padding:"5px 12px", fontSize:12,
+                          fontWeight: slOverviewTab===t.id ? 600 : 400,
+                          cursor:"pointer", transition:"all .15s",
+                        }}>{t.label}</button>
                     ))}
                   </div>
                 )}
@@ -1325,56 +1344,50 @@ export default function App() {
 
               {/* ── OVERVIEW (no active cat) ── */}
               {!slActiveCat && (
-                <div style={{ padding:`0 ${isMobile?14:20}px 20px` }}>
-
-                  {/* Idle sources section */}
-                  <div style={{ marginTop:16, marginBottom:20 }}>
-                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                      <div>
-                        <div style={{ fontWeight:700, fontSize:13 }}>⏱ Idle Sources</div>
-                        <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>Not visited in 5+ days. Move them into a category.</div>
-                      </div>
-                      <span style={{ background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700 }}>{idleSources.length}</span>
-                    </div>
-                    <input value={slIdleSearch} onChange={e=>setSlIdleSearch(e.target.value)} placeholder="Search idle sources…"
-                      style={{ width:"100%", background:"#f4f4f5", border:"none", borderRadius:8, padding:"8px 12px", fontSize:13, outline:"none", fontFamily:"inherit", marginBottom:10, boxSizing:"border-box" }} />
-                    {idleSources.length === 0 ? (
-                      <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"24px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
-                        {slIdleSearch ? "No results." : "✅ No idle sources right now."}
-                      </div>
-                    ) : idleSources.slice(0,30).map(a => {
-                      const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
-                      const latest = keys.length ? Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0)) : 0;
-                      const days = latest === 0 ? null : Math.floor((now - latest) / 86400000);
-                      return (
-                        <div key={a.id} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"11px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
-                          <Avatar name={a.username} size={38} />
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
-                            <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>
-                              {a.owner}
-                              {days !== null && <span style={{ marginLeft:6, background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"1px 6px", fontWeight:600, fontSize:10 }}>{days}d idle</span>}
-                              {days === null && <span style={{ marginLeft:6, background:"#f3f4f6", color:"#9ca3af", borderRadius:20, padding:"1px 6px", fontWeight:600, fontSize:10 }}>never visited</span>}
-                            </div>
-                          </div>
-                          <button onClick={()=>window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer")}
-                            style={{ border:"1.5px solid #dbdbdb", borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:600, color:"#18181b", background:"#fff", cursor:"pointer", flexShrink:0 }}>Open</button>
-                          <button onClick={()=>slMoveIn(a)} disabled={slMoving===a.id}
-                            style={{ border:"none", borderRadius:7, padding:"4px 12px", fontSize:11, fontWeight:600, color:"#fff", background:slMoving===a.id?"#a1a1aa":"#6366f1", cursor:slMoving===a.id?"not-allowed":"pointer", flexShrink:0 }}>
-                            {slMoving===a.id?"…":"Move in"}
-                          </button>
+                <div>
+                  {/* ── IDLE TAB ── */}
+                  {slOverviewTab==="idle" && (
+                    <div style={{ padding:`12px ${isMobile?14:20}px` }}>
+                      <input value={slIdleSearch} onChange={e=>setSlIdleSearch(e.target.value)} placeholder="Search idle sources…"
+                        style={{ width:"100%", background:"#f4f4f5", border:"none", borderRadius:8, padding:"8px 12px", fontSize:13, outline:"none", fontFamily:"inherit", marginBottom:12, boxSizing:"border-box" }} />
+                      {idleSources.length === 0 ? (
+                        <div style={{ textAlign:"center", padding:"60px 20px", color:"#a1a1aa", fontSize:13 }}>
+                          {slIdleSearch ? "No results." : "✅ No idle sources right now."}
                         </div>
-                      );
-                    })}
-                    {idleSources.length > 30 && <div style={{ textAlign:"center", fontSize:12, color:"#a1a1aa", marginTop:6 }}>+ {idleSources.length-30} more. Use search to narrow down.</div>}
-                  </div>
+                      ) : idleSources.map(a => {
+                        const keys = Object.keys(a).filter(k => k.startsWith("lastVisit_") || k === "lastVisited");
+                        const latest = keys.length ? Math.max(...keys.map(k => a[k] ? new Date(a[k]).getTime() : 0)) : 0;
+                        const days = latest === 0 ? null : Math.floor((now - latest) / 86400000);
+                        return (
+                          <div key={a.id} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"11px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
+                            <Avatar name={a.username} size={38} />
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                              <div style={{ fontSize:11, color:"#a1a1aa", marginTop:1 }}>
+                                {a.owner}
+                                {days !== null && <span style={{ marginLeft:6, background:"#fef3c7", color:"#d97706", borderRadius:20, padding:"1px 6px", fontWeight:600, fontSize:10 }}>{days}d idle</span>}
+                                {days === null && <span style={{ marginLeft:6, background:"#f3f4f6", color:"#9ca3af", borderRadius:20, padding:"1px 6px", fontWeight:600, fontSize:10 }}>never visited</span>}
+                              </div>
+                            </div>
+                            <button onClick={()=>window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer")}
+                              style={{ border:"1.5px solid #dbdbdb", borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:600, color:"#18181b", background:"#fff", cursor:"pointer", flexShrink:0 }}>Open</button>
+                            <button onClick={()=>slMoveIn(a)} disabled={slMoving===a.id}
+                              style={{ border:"none", borderRadius:7, padding:"4px 12px", fontSize:11, fontWeight:600, color:"#fff", background:slMoving===a.id?"#a1a1aa":"#6366f1", cursor:slMoving===a.id?"not-allowed":"pointer", flexShrink:0 }}>
+                              {slMoving===a.id?"…":"Move in"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                  {/* Unassigned items */}
-                  {unassigned.length > 0 && (
-                    <div style={{ marginBottom:20 }}>
-                      <div style={{ fontWeight:700, fontSize:13, marginBottom:8 }}>📥 Unassigned ({unassigned.length})</div>
-                      {unassigned.map(item => (
-                        <div key={item.id} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"10px 14px", marginBottom:6, display:"flex", alignItems:"center", gap:10 }}>
+                  {/* ── UNASSIGNED TAB ── */}
+                  {slOverviewTab==="unassigned" && (
+                    <div style={{ padding:`12px ${isMobile?14:20}px` }}>
+                      {unassigned.length === 0 ? (
+                        <div style={{ textAlign:"center", padding:"60px 20px", color:"#a1a1aa", fontSize:13 }}>No unassigned sources. Move idle sources in first.</div>
+                      ) : unassigned.map(item => (
+                        <div key={item.id} style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"10px 14px", marginBottom:8, display:"flex", alignItems:"center", gap:10 }}>
                           <Avatar name={item.username} size={36} />
                           <div style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontWeight:600, fontSize:13 }}>{item.username}</div>
@@ -1392,54 +1405,54 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Categories grid */}
-                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-                    <div style={{ fontWeight:700, fontSize:13 }}>Product Categories</div>
-                    <button onClick={()=>setSlShowNewCat(true)} style={{ background:"#18181b", color:"#fff", border:"none", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>+ New</button>
-                  </div>
-
-                  {slShowNewCat && (
-                    <div style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:10, padding:"12px 14px", marginBottom:12, display:"flex", gap:8 }}>
-                      <input autoFocus value={slNewCatName} onChange={e=>setSlNewCatName(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") slCreateCat(); }}
-                        placeholder="e.g. Dinosaur Costume" style={{ flex:1, background:"#f4f4f5", border:"none", borderRadius:7, padding:"8px 10px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-                      <button onClick={slCreateCat} disabled={slSavingCat||!slNewCatName.trim()} style={{ background:slSavingCat||!slNewCatName.trim()?"#f4f4f5":"#18181b", color:slSavingCat||!slNewCatName.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:7, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>{slSavingCat?"…":"Create"}</button>
-                      <button onClick={()=>{ setSlShowNewCat(false); setSlNewCatName(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:18, padding:"4px" }}>×</button>
-                    </div>
-                  )}
-
-                  {slCats.length === 0 ? (
-                    <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"32px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
-                      No categories yet. Create one to start organising sources.
-                    </div>
-                  ) : (
-                    <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10 }}>
-                      {slCats.map(cat => {
-                        const total = slItems.filter(i => i.catId === cat.id).length;
-                        const unused = slItems.filter(i => i.catId === cat.id && i.status !== "used").length;
-                        const used = slItems.filter(i => i.catId === cat.id && i.status === "used").length;
-                        return (
-                          <div key={cat.id} onClick={()=>{ setSlActiveCat(cat.id); setSlTab("unused"); }}
-                            style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:12, padding:"14px", cursor:"pointer", transition:"border .15s" }}
-                            onMouseEnter={e=>e.currentTarget.style.border="1px solid #6366f1"}
-                            onMouseLeave={e=>e.currentTarget.style.border="1px solid #ebebeb"}>
-                            <div style={{ fontWeight:700, fontSize:13, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cat.name}</div>
-                            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                              <span style={{ background:"#f0fdf4", color:"#16a34a", borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:600 }}>{unused} unused</span>
-                              <span style={{ background:"#f1f5f9", color:"#64748b", borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:600 }}>{used} used</span>
-                            </div>
-                            <div style={{ marginTop:8, display:"flex", justifyContent:"flex-end" }}>
-                              <button onClick={e=>{ e.stopPropagation(); slDeleteCat(cat.id); }}
-                                style={{ background:"none", border:"none", cursor:"pointer", color:"#d4d4d4", fontSize:13, padding:0, fontWeight:600 }}
-                                onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>delete</button>
-                            </div>
-                          </div>
-                        );
-                      })}
+                  {/* ── CATEGORIES TAB ── */}
+                  {slOverviewTab==="categories" && (
+                    <div style={{ padding:`12px ${isMobile?14:20}px` }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+                        <div style={{ fontSize:13, fontWeight:600 }}>Product Categories</div>
+                        <button onClick={()=>setSlShowNewCat(true)} style={{ background:"#18181b", color:"#fff", border:"none", borderRadius:7, padding:"5px 12px", fontSize:12, fontWeight:600, cursor:"pointer" }}>+ New</button>
+                      </div>
+                      {slShowNewCat && (
+                        <div style={{ background:"#fff", border:"1px solid #e5e5e5", borderRadius:10, padding:"12px 14px", marginBottom:12, display:"flex", gap:8 }}>
+                          <input autoFocus value={slNewCatName} onChange={e=>setSlNewCatName(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter") slCreateCat(); }}
+                            placeholder="e.g. Dinosaur Costume" style={{ flex:1, background:"#f4f4f5", border:"none", borderRadius:7, padding:"8px 10px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
+                          <button onClick={slCreateCat} disabled={slSavingCat||!slNewCatName.trim()} style={{ background:slSavingCat||!slNewCatName.trim()?"#f4f4f5":"#18181b", color:slSavingCat||!slNewCatName.trim()?"#a1a1aa":"#fff", border:"none", borderRadius:7, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>{slSavingCat?"…":"Create"}</button>
+                          <button onClick={()=>{ setSlShowNewCat(false); setSlNewCatName(""); }} style={{ background:"none", border:"none", cursor:"pointer", color:"#a1a1aa", fontSize:18, padding:"4px" }}>×</button>
+                        </div>
+                      )}
+                      {slCats.length === 0 ? (
+                        <div style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:10, padding:"32px", textAlign:"center", color:"#a1a1aa", fontSize:13 }}>
+                          No categories yet. Tap "+ New" to create one.
+                        </div>
+                      ) : (
+                        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10 }}>
+                          {slCats.map(cat => {
+                            const unused = slItems.filter(i => i.catId === cat.id && i.status !== "used").length;
+                            const used = slItems.filter(i => i.catId === cat.id && i.status === "used").length;
+                            return (
+                              <div key={cat.id} onClick={()=>{ setSlActiveCat(cat.id); setSlTab("unused"); }}
+                                style={{ background:"#fff", border:"1px solid #ebebeb", borderRadius:12, padding:"14px", cursor:"pointer", transition:"border .15s" }}
+                                onMouseEnter={e=>e.currentTarget.style.border="1px solid #6366f1"}
+                                onMouseLeave={e=>e.currentTarget.style.border="1px solid #ebebeb"}>
+                                <div style={{ fontWeight:700, fontSize:13, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cat.name}</div>
+                                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                                  <span style={{ background:"#f0fdf4", color:"#16a34a", borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:600 }}>{unused} unused</span>
+                                  <span style={{ background:"#f1f5f9", color:"#64748b", borderRadius:20, padding:"1px 8px", fontSize:11, fontWeight:600 }}>{used} used</span>
+                                </div>
+                                <div style={{ marginTop:8, display:"flex", justifyContent:"flex-end" }}>
+                                  <button onClick={e=>{ e.stopPropagation(); slDeleteCat(cat.id); }}
+                                    style={{ background:"none", border:"none", cursor:"pointer", color:"#d4d4d4", fontSize:13, padding:0, fontWeight:600 }}
+                                    onMouseEnter={e=>e.target.style.color="#ef4444"} onMouseLeave={e=>e.target.style.color="#d4d4d4"}>delete</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               )}
-
               {/* ── CATEGORY DETAIL ── */}
               {slActiveCat && (
                 <div>
@@ -1585,7 +1598,8 @@ export default function App() {
       {/* ── FACEBOOK PAGE ── */}
       {page==="facebook" && canFacebook(user.role) && (() => {
         const getFbStatus = a => a.fbStatus || "unchecked";
-        const teammates = users.filter(u => u.role === "teammate");
+        // Show all users who have sources (including owner, manager, etc.)
+        const teammates = users.filter(u => accounts.some(a => a.owner === u.displayName));
 
         const fbTabs = [
           { id:"all",       label:"All" },
