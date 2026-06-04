@@ -1699,9 +1699,14 @@ export default function App() {
                           const status = getFbStatus(a);
                           return (
                             <div key={a.id} style={{ display:"flex", alignItems:"center", gap:10, padding:`10px ${isMobile?14:20}px`, paddingLeft: isMobile?20:28, borderBottom:"1px solid #f2f2f2" }}>
-                              <Avatar name={a.username} size={36} />
+                              <div onClick={()=>window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer")} style={{ cursor:"pointer", flexShrink:0 }}>
+                                <Avatar name={a.username} size={36} />
+                              </div>
                               <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontWeight:500, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.username}</div>
+                                <div onClick={()=>window.open(`https://www.instagram.com/${a.username}`,"_blank","noreferrer")}
+                                  style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer", textDecoration:"underline", textDecorationColor:"#d4d4d4" }}>
+                                  {a.username}
+                                </div>
                                 <div style={{ marginTop:3 }}><StatusBadge status={status} /></div>
                               </div>
                               {/* Mark buttons */}
